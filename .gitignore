@@ -1,0 +1,25 @@
+# 백업 파일
+*.backup
+*.bak
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 에디터
+.vscode/
+.idea/
+*.swp
+
+# 임시/메모
+hello.txt
+hello2.txt
+클로드코드 명령어.txt
+
+# 로그
+*.log
+
+# 환경 변수 (혹시 추후 사용)
+.env
+.env.local

@@ -1,0 +1,1366 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>벨콤 견적 시스템</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'맑은 고딕','Malgun Gothic',sans-serif;font-size:13px;background:#f0f2f5;color:#222;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+/* Header */
+.app-header{background:#1a3a5c;color:#fff;padding:10px 20px;display:flex;align-items:center;gap:16px;flex-shrink:0}
+.app-title{font-size:15px;font-weight:700}
+.app-subtitle{font-size:11px;opacity:.65;margin-top:2px}
+/* Tabs */
+.tab-nav{background:#fff;border-bottom:2px solid #dde3ef;display:flex;padding:0 16px;flex-shrink:0}
+.tab-btn{padding:9px 22px;border:none;background:none;cursor:pointer;font-size:13px;font-family:inherit;color:#777;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .15s}
+.tab-btn.active{color:#1a3a5c;font-weight:700;border-bottom-color:#1a3a5c}
+.tab-btn:hover:not(.active){color:#1a3a5c;background:#f5f7fa}
+/* Tab content */
+.tab-content{display:none;flex:1;overflow:hidden}
+.tab-content.active{display:flex;flex-direction:column}
+/* Quote tab */
+.quote-header{background:#fff;padding:10px 16px;border-bottom:1px solid #e0e4ea;display:flex;gap:16px;align-items:center;flex-wrap:wrap;flex-shrink:0}
+.quote-header label{font-size:11px;color:#666;margin-right:4px}
+.quote-header input{border:1px solid #cdd2da;border-radius:4px;padding:5px 8px;font-size:13px;font-family:inherit}
+#inp-client{width:160px}
+#inp-project{width:220px}
+#inp-date{width:145px}
+.quote-body{display:flex;flex:1;overflow:hidden}
+/* Left panel */
+.left-panel{width:270px;min-width:200px;background:#fff;border-right:1px solid #e0e4ea;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+.panel-title{padding:8px 12px;font-size:11px;font-weight:700;color:#666;background:#f8f9fa;border-bottom:1px solid #e8ebf0;text-transform:uppercase;letter-spacing:.5px}
+.cat-select{margin:8px;padding:6px 8px;border:1px solid #cdd2da;border-radius:4px;font-size:13px;font-family:inherit;width:calc(100% - 16px)}
+.item-list{flex:1;overflow-y:auto;padding:4px 8px 8px}
+.item-btn{display:flex;justify-content:space-between;align-items:center;width:100%;padding:6px 8px;margin-bottom:2px;border:1px solid transparent;border-radius:4px;background:none;cursor:pointer;font-family:inherit;font-size:12px;text-align:left;transition:all .1s}
+.item-btn:hover{background:#eef2ff;border-color:#b8c5e8}
+.item-name{flex:1;color:#222;word-break:keep-all}
+.item-price{color:#1a3a5c;font-weight:600;margin-left:8px;white-space:nowrap;font-size:11px}
+/* Right panel */
+.right-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#fff}
+.panel-header{padding:8px 16px;background:#f8f9fa;border-bottom:1px solid #e0e4ea;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.panel-header-title{font-size:11px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.5px}
+.quote-table-wrap{flex:1;overflow-y:auto}
+/* Tables */
+table{width:100%;border-collapse:collapse}
+th{background:#f0f2f5;padding:7px 10px;font-size:11px;font-weight:700;color:#555;border-bottom:2px solid #d0d5dc;text-align:center;white-space:nowrap;position:sticky;top:0;z-index:1}
+td{padding:6px 10px;border-bottom:1px solid #eef0f3;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:#fafbfd}
+.td-no{text-align:center;width:36px;color:#aaa;font-size:11px}
+.td-num{text-align:right;white-space:nowrap}
+.td-ctr{text-align:center}
+.td-act{text-align:center;white-space:nowrap;width:60px}
+/* Editable inputs in table */
+.editable{border:none;background:transparent;font-family:inherit;font-size:13px;width:100%;padding:2px 4px;border-radius:3px;color:inherit}
+.editable:focus{outline:2px solid #1a3a5c;background:#fff}
+/* Totals */
+.totals-bar{padding:8px 16px;background:#f8f9fa;border-top:2px solid #e0e4ea;display:flex;justify-content:flex-end;gap:28px;align-items:center;flex-shrink:0}
+.total-item{font-size:12px;color:#666}
+.total-item span{font-weight:700;color:#1a3a5c;font-size:13px;margin-left:6px}
+.total-item.grand span{font-size:16px;color:#c0392b}
+/* Action bar */
+.action-bar{padding:8px 16px;background:#fff;border-top:1px solid #e0e4ea;display:flex;gap:8px;justify-content:flex-end;flex-shrink:0}
+/* Buttons */
+.btn{padding:6px 14px;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-family:inherit;transition:all .15s;font-weight:500}
+.btn-primary{background:#1a3a5c;color:#fff}
+.btn-primary:hover{background:#245580}
+.btn-secondary{background:#e4e8ef;color:#444}
+.btn-secondary:hover{background:#d0d5dc}
+.btn-danger{background:#dc3545;color:#fff}
+.btn-danger:hover{background:#c82333}
+.btn-success{background:#198754;color:#fff}
+.btn-success:hover{background:#157347}
+.btn-sm{padding:3px 9px;font-size:12px}
+/* Modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:1000;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:#fff;border-radius:8px;padding:22px;width:340px;box-shadow:0 8px 32px rgba(0,0,0,.2)}
+.modal h3{font-size:14px;margin-bottom:14px;color:#1a3a5c}
+.field{margin-bottom:10px}
+.field label{display:block;font-size:11px;color:#666;margin-bottom:3px}
+.field input{width:100%;padding:6px 8px;border:1px solid #cdd2da;border-radius:4px;font-size:13px;font-family:inherit}
+.modal .btn-row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+/* Price tab */
+#tab-price{overflow-y:auto;padding:16px;flex-direction:column}
+.price-toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+.price-toolbar h2{flex:1;font-size:15px;color:#1a3a5c;font-weight:700}
+.cat-card{background:#fff;border:1px solid #e0e4ea;border-radius:6px;margin-bottom:14px;overflow:hidden}
+.cat-card-header{padding:9px 14px;background:#edf1fa;border-bottom:1px solid #dde3f0;display:flex;align-items:center;gap:8px}
+.cat-card-title{flex:1}
+.cat-card-name{font-weight:700;color:#1a3a5c;font-size:13px}
+.cat-card-desc{font-size:11px;color:#888;margin-top:1px}
+.price-table th{font-size:11px;padding:6px 8px}
+.price-table td{font-size:12px;padding:5px 8px}
+.price-table .editable{font-size:12px}
+.add-item-row td{padding:6px 10px;background:#fafbfc}
+/* History tab */
+#tab-history{overflow-y:auto;padding:16px;flex-direction:column}
+.history-toolbar{margin-bottom:12px;display:flex;gap:8px;align-items:center}
+.history-toolbar h2{flex:1;font-size:15px;color:#1a3a5c;font-weight:700}
+.history-list{display:flex;flex-direction:column;gap:8px}
+.history-item{background:#fff;border:1px solid #e0e4ea;border-radius:6px;padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .15s}
+.history-item:hover{border-color:#1a3a5c;background:#f0f4ff}
+.history-meta{flex:1}
+.h-client{font-weight:700;font-size:14px;color:#1a3a5c}
+.h-project{font-size:12px;color:#666;margin-top:2px}
+.h-date{font-size:11px;color:#999;margin-top:2px}
+.history-amount{font-size:15px;font-weight:700;color:#c0392b;white-space:nowrap}
+/* Table borders */
+#quote-table th,#quote-table td,.price-table th,.price-table td{border:1px solid #d2d7e2}
+#quote-table th,.price-table th{border-bottom:2px solid #b0b8cc;background:#eceff5}
+/* NOTE bar */
+.note-bar{padding:8px 16px;background:#fffdf7;border-top:1px solid #e8e3d0;display:flex;align-items:flex-start;gap:8px;flex-shrink:0}
+.note-bar>label{font-size:11px;font-weight:700;color:#888;padding-top:5px;white-space:nowrap;letter-spacing:.5px}
+#inp-note{flex:1;border:1px solid #d0c8a8;border-radius:4px;padding:5px 8px;font-size:12px;font-family:inherit;resize:vertical;min-height:46px;line-height:1.6;background:#fffef9;color:#444}
+#inp-note:focus{outline:2px solid #1a3a5c;background:#fff}
+/* Expense section */
+.expense-section{border-top:2px dashed #d0d5dc;flex-shrink:0}
+.expense-toggle{width:100%;padding:7px 12px;border:none;background:none;cursor:pointer;font-size:12px;font-family:inherit;color:#1a3a5c;font-weight:600;text-align:left;display:flex;align-items:center;gap:6px}
+.expense-toggle:hover{background:#eef2ff}
+.expense-form-inner{padding:0 10px 10px;display:none;flex-direction:column;gap:5px}
+.expense-form-inner.open{display:flex}
+.expense-form-inner>div>label{font-size:11px;color:#666;display:block;margin-bottom:2px}
+.expense-form-inner input{width:100%;padding:5px 7px;border:1px solid #cdd2da;border-radius:4px;font-size:12px;font-family:inherit}
+.ef-row2{display:flex;gap:6px}
+.ef-row2>div{flex:1}
+/* Expense row highlight */
+tr.expense-row td{background:#fffbee}
+tr.expense-row:hover td{background:#fff5d6}
+/* Misc */
+.empty-msg{text-align:center;padding:36px 16px;color:#bbb;font-size:13px}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:#f0f2f5}
+::-webkit-scrollbar-thumb{background:#ccc;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#aaa}
+#print-area{display:none}
+/* Print */
+@media print{
+  .app-header,.tab-nav,.tab-content,.modal-overlay{display:none!important}
+  #print-area{display:block!important;font-family:'맑은 고딕','Malgun Gothic',sans-serif;font-size:10pt;color:#000}
+}
+/* 잠금 화면 */
+#lock-screen{position:fixed;inset:0;background:#1a3a5c;display:flex;align-items:center;justify-content:center;z-index:9999}
+#lock-screen.hidden{display:none}
+.lock-box{background:#fff;border-radius:12px;padding:44px 52px;text-align:center;width:360px;box-shadow:0 24px 64px rgba(0,0,0,.5)}
+.lock-logo{font-size:13px;color:#888;margin-bottom:6px;font-weight:500}
+.lock-title{font-size:20px;font-weight:700;color:#1a3a5c;margin-bottom:4px}
+.lock-subtitle{font-size:12px;color:#aaa;margin-bottom:28px}
+.lock-box input[type=password]{width:100%;padding:11px 14px;border:1.5px solid #cdd2da;border-radius:6px;font-size:14px;font-family:inherit;margin-bottom:10px;text-align:center;letter-spacing:3px}
+.lock-box input[type=password]:focus{outline:none;border-color:#1a3a5c}
+.lock-btn{width:100%;padding:11px;background:#1a3a5c;color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s}
+.lock-btn:hover{background:#245580}
+.lock-error{color:#dc3545;font-size:12px;margin-top:10px;display:none}
+/* 동기화 인디케이터 */
+.sync-indicator{display:flex;align-items:center;gap:5px;margin-left:auto;font-size:11px;color:rgba(255,255,255,.75)}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:#5cb85c;flex-shrink:0}
+.sync-dot.syncing{background:#f0ad4e;animation:sdpulse .9s infinite}
+.sync-dot.error{background:#e74c3c}
+@keyframes sdpulse{0%,100%{opacity:1}50%{opacity:.25}}
+/* 로그아웃 버튼 */
+.btn-logout{padding:5px 13px;background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.28);border-radius:4px;cursor:pointer;font-size:12px;font-family:inherit;margin-left:12px;transition:background .15s}
+.btn-logout:hover{background:rgba(255,255,255,.26)}
+</style>
+</head>
+<body>
+
+<!-- 비밀번호 잠금 화면 -->
+<div id="lock-screen">
+  <div class="lock-box">
+    <div class="lock-logo">㈜벨콤</div>
+    <div class="lock-title">견적 시스템</div>
+    <div class="lock-subtitle">접속하려면 비밀번호를 입력하세요</div>
+    <input type="password" id="pw-input" placeholder="비밀번호" onkeydown="if(event.key==='Enter')submitPassword()">
+    <button class="lock-btn" onclick="submitPassword()">접속</button>
+    <div class="lock-error" id="pw-error">비밀번호가 일치하지 않습니다</div>
+  </div>
+</div>
+
+<div class="app-header">
+  <div>
+    <div class="app-title">㈜벨콤 견적 시스템</div>
+    <div class="app-subtitle">디자인 · 콘텐츠 · 마케팅 제작</div>
+  </div>
+  <div class="sync-indicator" id="sync-indicator">
+    <div class="sync-dot" id="sync-dot"></div>
+    <span id="sync-text">-</span>
+  </div>
+  <button class="btn-logout" onclick="logout()">로그아웃</button>
+</div>
+
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="switchTab(this,'quote')">견적 작성</button>
+  <button class="tab-btn" onclick="switchTab(this,'price')">단가표 관리</button>
+  <button class="tab-btn" onclick="switchTab(this,'history')">견적 이력</button>
+</div>
+
+<!-- TAB 1: 견적 작성 -->
+<div id="tab-quote" class="tab-content active">
+  <div class="quote-header">
+    <div><label>수신처</label><input type="text" id="inp-client" placeholder="예: 현두상사"></div>
+    <div><label>프로젝트명</label><input type="text" id="inp-project" placeholder="프로젝트명 입력"></div>
+    <div><label>견적일자</label><input type="date" id="inp-date"></div>
+  </div>
+  <div class="quote-body">
+    <div class="left-panel">
+      <div class="panel-title">항목 선택</div>
+      <select class="cat-select" id="cat-select" onchange="renderItemList()"></select>
+      <div class="item-list" id="item-list"></div>
+      <div class="expense-section">
+        <button class="expense-toggle" id="expense-toggle-btn" onclick="toggleExpenseForm()">＋ 실비 항목 직접 입력</button>
+        <div class="expense-form-inner" id="expense-form">
+          <div><label>품명</label><input type="text" id="e-name" placeholder="실비 품명 입력"></div>
+          <div class="ef-row2">
+            <div><label>수량</label><input type="number" id="e-qty" value="1" min="0.01" step="any"></div>
+            <div><label>단위</label><input type="text" id="e-unit" value="건"></div>
+          </div>
+          <div><label>공급단가 (원)</label><input type="number" id="e-price" placeholder="0"></div>
+          <div><label>비고</label><input type="text" id="e-note" value="(실비)"></div>
+          <button class="btn btn-primary btn-sm" onclick="addExpenseItem()" style="width:100%;margin-top:2px">추가</button>
+        </div>
+      </div>
+    </div>
+    <div class="right-panel">
+      <div class="panel-header">
+        <span class="panel-header-title">견적 내역</span>
+        <span style="font-size:11px;color:#aaa">항목 클릭 → 수량 입력 → 추가</span>
+      </div>
+      <div class="quote-table-wrap">
+        <table id="quote-table">
+          <thead>
+            <tr>
+              <th class="td-no">No.</th>
+              <th style="min-width:140px">품명</th>
+              <th style="width:50px">단위</th>
+              <th style="width:60px">수량</th>
+              <th style="width:110px">공급단가</th>
+              <th style="width:110px">공급가액</th>
+              <th style="width:90px">세액</th>
+              <th style="min-width:80px">비고</th>
+              <th class="td-act">삭제</th>
+            </tr>
+          </thead>
+          <tbody id="quote-tbody"></tbody>
+        </table>
+      </div>
+      <div class="totals-bar">
+        <div class="total-item">공급가액 <span id="total-supply">0</span>원</div>
+        <div class="total-item">세액 <span id="total-tax">0</span>원</div>
+        <div class="total-item grand">합계 <span id="total-grand">0</span>원</div>
+      </div>
+      <div class="note-bar">
+        <label>NOTE</label>
+        <textarea id="inp-note" rows="2">1. 상기 견적서 유효기간은 2주일 입니다.
+2. 상기 견적서 타 업체 공개를 금합니다.</textarea>
+      </div>
+      <div class="action-bar">
+        <button class="btn btn-success" onclick="saveQuote()">견적 저장</button>
+        <button class="btn btn-primary" onclick="exportExcel()">엑셀 다운로드</button>
+        <button class="btn btn-secondary" onclick="printQuote()">인쇄 / PDF</button>
+        <button class="btn btn-danger" onclick="clearQuote()">초기화</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 2: 단가표 관리 -->
+<div id="tab-price" class="tab-content">
+  <div class="price-toolbar">
+    <h2>단가표 관리</h2>
+    <button class="btn btn-primary" onclick="addCategory()">+ 새 카테고리</button>
+    <button class="btn btn-secondary" onclick="exportPriceExcel()">엑셀 내보내기</button>
+    <label class="btn btn-secondary" style="cursor:pointer">엑셀 가져오기<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importPriceExcel(event)"></label>
+  </div>
+  <div id="price-container"></div>
+</div>
+
+<!-- TAB 3: 견적 이력 -->
+<div id="tab-history" class="tab-content">
+  <div class="history-toolbar">
+    <h2>견적 이력</h2>
+  </div>
+  <div class="history-list" id="history-list"></div>
+</div>
+
+<!-- 수량 입력 모달 -->
+<div class="modal-overlay" id="qty-modal" onclick="closeModalOnBg(event,'qty-modal')">
+  <div class="modal">
+    <h3 id="qty-modal-title">항목 추가</h3>
+    <div class="field"><label>품명</label><input type="text" id="m-name"></div>
+    <div class="field"><label>단위</label><input type="text" id="m-unit" style="width:100px"></div>
+    <div class="field"><label>수량</label><input type="number" id="m-qty" value="1" min="0.01" step="any"></div>
+    <div class="field"><label>공급단가 (원)</label><input type="number" id="m-price" step="any"></div>
+    <div class="field"><label>비고</label><input type="text" id="m-note"></div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="closeModal('qty-modal')">취소</button>
+      <button class="btn btn-primary" onclick="addItemToQuote()">추가</button>
+    </div>
+  </div>
+</div>
+
+<!-- 인쇄 영역 -->
+<div id="print-area"></div>
+
+<script>
+// ===== 기본 단가 데이터 =====
+const DEFAULT_PRICE_DATA = {
+  "패키지_제작": {
+    "description": "박스, 라벨, 메뉴얼 등 제품 패키지 디자인 제작",
+    "items": [
+      {"name":"기프트박스","unit":"건","price":150000,"note":"팬톤컬러 지정, 신규 제작","source":"메리젠"},
+      {"name":"기프트박스 (Other Colors)","unit":"건","price":75000,"note":"동일 디자인 컬러 변형","source":"메리젠"},
+      {"name":"기프트박스 수정","unit":"회","price":50000,"note":"1회 수정당","source":"메리젠"},
+      {"name":"기프트박스 (Other Colors) 수정","unit":"회","price":20000,"note":"컬러 변형분 수정","source":"메리젠"},
+      {"name":"메일박스","unit":"건","price":70000,"note":"신규 제작","source":"메리젠"},
+      {"name":"메일박스 (Other Colors)","unit":"건","price":35000,"note":"컬러 변형","source":"메리젠"},
+      {"name":"카톤박스","unit":"건","price":70000,"note":"신규 제작","source":"메리젠"},
+      {"name":"카톤박스 (Other Colors)","unit":"건","price":35000,"note":"컬러 변형","source":"메리젠"},
+      {"name":"외박스","unit":"건","price":40000,"note":"로고/텍스트만 전달, 수정없음","source":"올비"},
+      {"name":"인박스 (기획포함)","unit":"건","price":80000,"note":"신규 제작","source":"비에이치"},
+      {"name":"3P 박스 패키지 + 거치대","unit":"건","price":500000,"note":"복합 구성","source":"올비"},
+      {"name":"띠지 패키지 (2P)","unit":"건","price":800000,"note":"수정 5회 포함","source":"올비"},
+      {"name":"슬리브 박스(고급/면세점)","unit":"종","price":500000,"note":"고급 라인 / 메인 디자인","source":"데코리아"},
+      {"name":"슬리브 박스(일반)","unit":"종","price":180000,"note":"일반 라인","source":"데코리아"},
+      {"name":"슬리브 박스 (아이보리 공통)","unit":"건","price":180000,"note":"공통 디자인","source":"데코리아"},
+      {"name":"슬리브 박스(문구추가/수정)","unit":"건","price":60000,"note":"기존 디자인 문구 수정","source":"데코리아"},
+      {"name":"메뉴얼 (장당)","unit":"장","price":24000,"note":"동일/애매한 수정 5페이지는 카운팅 X","source":"메리젠"},
+      {"name":"라벨","unit":"건","price":40000,"note":"레이팅/배터리 부착 라벨 등","source":"메리젠"},
+      {"name":"라벨 (Other Colors)","unit":"건","price":20000,"note":"컬러 변형","source":"메리젠"},
+      {"name":"삽지/간지","unit":"건","price":60000,"note":"박스 동봉용","source":"비에이치/오브휴"},
+      {"name":"삽지(슬리브 박스용)","unit":"건","price":100000,"note":"데코리아 라인","source":"데코리아"},
+      {"name":"간지 수정","unit":"건","price":30000,"note":"기존 디자인 수정","source":"비에이치"},
+      {"name":"투명씰스티커","unit":"건","price":30000,"note":"","source":"데코리아"},
+      {"name":"수지스티커","unit":"건","price":30000,"note":"","source":"오브휴"},
+      {"name":"명판조절기 스티커","unit":"건","price":30000,"note":"","source":"오브휴"},
+      {"name":"아답터 라벨","unit":"건","price":30000,"note":"","source":"오브휴"},
+      {"name":"리모컨 (스티커/실크)","unit":"건","price":30000,"note":"신규","source":"메리젠/오브휴"},
+      {"name":"리모컨 실크 (Other Colors)","unit":"건","price":15000,"note":"컬러 변형","source":"메리젠"},
+      {"name":"사용설명서","unit":"건","price":60000,"note":"","source":"오브휴"},
+      {"name":"일매지 디자인","unit":"종","price":30000,"note":"라인업 추가 시","source":"데코리아"},
+      {"name":"일매지 디자인 (메인종)","unit":"종","price":50000,"note":"대표 종","source":"데코리아"},
+      {"name":"파우치 디자인","unit":"건","price":1500000,"note":"예: 타요 젤리 파우치","source":"데코리아"},
+      {"name":"표기사항 제작 (폰트수정 포함)","unit":"건","price":150000,"note":"","source":"데코리아"},
+      {"name":"추가 수정","unit":"회","price":50000,"note":"패키지 추가 수정 1회당","source":"메리젠"},
+      {"name":"장기협력사 할인","unit":"건","price":-100000,"note":"협력사 할인 (협상 가능)","source":"메리젠/올비"}
+    ]
+  },
+  "상세페이지_제작": {
+    "description": "상품 상세페이지 기획·제작 및 AI/촬영 콘텐츠",
+    "items": [
+      {"name":"상세페이지 기획","unit":"건","price":1000000,"note":"표준 (수정 일정 횟수 포함)","source":"메리젠/현두"},
+      {"name":"상세페이지 기획 (간소형)","unit":"건","price":300000,"note":"간단한 상세 (사은품 등)","source":"메리젠"},
+      {"name":"상세페이지 기획 (중간)","unit":"건","price":600000,"note":"중간 규모","source":"비에이치"},
+      {"name":"상세페이지 기획 (와디즈/펀딩)","unit":"건","price":600000,"note":"펀딩 플랫폼용","source":"데코리아"},
+      {"name":"상세페이지 제작","unit":"건","price":1500000,"note":"표준","source":"메리젠/현두"},
+      {"name":"상세페이지 제작 (간소형)","unit":"건","price":500000,"note":"사은품/간단형","source":"메리젠"},
+      {"name":"상세페이지 제작 (중간)","unit":"건","price":1000000,"note":"중간 규모","source":"비에이치"},
+      {"name":"상세페이지 제작 (와디즈/펀딩)","unit":"건","price":1600000,"note":"AI이미지+크레딧 포함","source":"데코리아"},
+      {"name":"상세페이지 로고 및 정보 수정 (장당)","unit":"장","price":150000,"note":"전체검열/GIF검열/HTML 포함","source":"비에이치"},
+      {"name":"상세페이지 문구 일부 수정","unit":"건","price":100000,"note":"기존 페이지 일부","source":"비에이치"},
+      {"name":"상단 신규 컬러 배너","unit":"건","price":100000,"note":"","source":"현두"},
+      {"name":"제품 혼합 배너","unit":"건","price":30000,"note":"","source":"현두"},
+      {"name":"상세페이지 컬러 수정 및 합성 (GIF포함)","unit":"건","price":500000,"note":"","source":"현두"},
+      {"name":"상세페이지 상단 배너 (신규맛/신규컬러)","unit":"건","price":30000,"note":"","source":"데코리아"},
+      {"name":"상세페이지 간단버전 (홈페이지 캡쳐본)","unit":"건","price":150000,"note":"","source":"올비"},
+      {"name":"AI 이미지 - Basic","unit":"장","price":20000,"note":"기획료 포함","source":"현두/메리젠"},
+      {"name":"AI 이미지 - Deluxe","unit":"장","price":50000,"note":"기획료 포함","source":"현두/메리젠"},
+      {"name":"AI 이미지 - Premium","unit":"장","price":120000,"note":"기획료 포함","source":"현두/메리젠"},
+      {"name":"AI 이미지 생성 (후보정 포함)","unit":"장","price":40000,"note":"11장 중 1장 무상 제공 룰","source":"메리젠"},
+      {"name":"AI 영상","unit":"건","price":120000,"note":"기획료 포함","source":"현두/메리젠"},
+      {"name":"숏츠 영상 (세로형)","unit":"건","price":200000,"note":"","source":"현두"},
+      {"name":"포토그래퍼 촬영 (시간당)","unit":"시간","price":150000,"note":"","source":"비에이치/올비"},
+      {"name":"스튜디오 렌탈 (시간당)","unit":"시간","price":70000,"note":"3시간 기준","source":"비에이치"},
+      {"name":"스튜디오 렌탈 (저가형, 시간당)","unit":"시간","price":25000,"note":"5시간 등 단가 낮은 케이스","source":"올비"},
+      {"name":"스튜디오 촬영 및 대관","unit":"시간","price":150000,"note":"데코리아 라인","source":"데코리아"},
+      {"name":"촬영 기획","unit":"건","price":200000,"note":"","source":"데코리아"},
+      {"name":"모델료 (얼굴 노출 X)","unit":"건","price":300000,"note":"","source":"비에이치"},
+      {"name":"사진/GIF 보정료","unit":"건","price":150000,"note":"","source":"비에이치"},
+      {"name":"사진/GIF 제작 (모션 포함)","unit":"건","price":400000,"note":"","source":"메리젠"},
+      {"name":"사진/GIF 제작 (모션포함)/AI이미지 제작료","unit":"건","price":300000,"note":"현두 라인","source":"현두"}
+    ]
+  },
+  "홈페이지_및_스마트스토어": {
+    "description": "홈페이지·자사몰·스마트스토어 등록 및 운영",
+    "items": [
+      {"name":"홈페이지 기획","unit":"건","price":1500000,"note":"초안 + 6번 수정 기준","source":"올비"},
+      {"name":"홈페이지 제작","unit":"건","price":5000000,"note":"초안 + 3번 수정 기준","source":"올비"},
+      {"name":"AI 생성 이미지/영상 제작료 (홈페이지용 일괄)","unit":"건","price":1000000,"note":"기획료+크레딧 이용료 포함","source":"올비"},
+      {"name":"네이버 스마트스토어 세팅","unit":"건","price":150000,"note":"로고, 썸네일 수정 포함 + 세팅","source":"올비"},
+      {"name":"아임웹 상품등록 (상품당)","unit":"상품","price":25000,"note":"옵션/카테고리/배송 설정 포함","source":"현두"},
+      {"name":"아임웹 일반 리뷰 등록 (건당)","unit":"건","price":1500,"note":"","source":"현두"},
+      {"name":"아임웹 포토 리뷰 등록 (건당)","unit":"건","price":3000,"note":"포토 사진 제공 기준","source":"현두"}
+    ]
+  },
+  "브랜딩_및_인쇄물": {
+    "description": "로고·명함·리플렛·POP 등 브랜딩 인쇄물",
+    "items": [
+      {"name":"로고 제작 (기본)","unit":"건","price":200000,"note":"시안 1~2종","source":"비에이치"},
+      {"name":"로고 디자인 (수정 포함)","unit":"건","price":300000,"note":"1.5번 수정","source":"올비"},
+      {"name":"명함 제작","unit":"건","price":100000,"note":"시안 4개, 1번 수정","source":"올비"},
+      {"name":"리플렛 제작","unit":"건","price":150000,"note":"","source":"올비"},
+      {"name":"리플렛 (양면, 기획 포함)","unit":"건","price":500000,"note":"AI이미지/목업 합성, 수정 3회 포함","source":"데코리아"},
+      {"name":"POP 작업 (면세점/매장용)","unit":"건","price":150000,"note":"","source":"데코리아"}
+    ]
+  },
+  "SNS_및_콘텐츠": {
+    "description": "인스타·릴스·숏폼 등 SNS 콘텐츠",
+    "items": [
+      {"name":"인스타 초기 세팅 (피드 15개)","unit":"건","price":400000,"note":"","source":"올비"},
+      {"name":"인스타 릴스 → 유튜브 리사이징","unit":"건","price":50000,"note":"업로드 포함, 수정 포함","source":"올비"},
+      {"name":"(실비) 인플루언서 릴스 원본 구매","unit":"건","price":100000,"note":"실비","source":"올비"}
+    ]
+  },
+  "광고영상_심의": {
+    "description": "광고 영상 제작 (의료기기 등 심의 대상 포함)",
+    "items": [
+      {"name":"[Standard] 영상촬영 (시간)","unit":"시간","price":70000,"note":"심의 케이스 기본 라인","source":"현두"},
+      {"name":"[Standard] 스튜디오 (시간)","unit":"시간","price":50000,"note":"","source":"현두"},
+      {"name":"[Standard] 모델","unit":"건","price":400000,"note":"모델 5시간 기준, 실섭외 따라 변동","source":"현두"},
+      {"name":"[Standard] 촬영기획 (콘티)","unit":"건","price":300000,"note":"","source":"현두"},
+      {"name":"[Standard] 편집","unit":"건","price":700000,"note":"20초 1개 / 40초 1개","source":"현두"},
+      {"name":"[Standard] 광고심의 대행","unit":"건","price":500000,"note":"수정 1회 / 심의 수수료 별도","source":"현두"},
+      {"name":"[Deluxe] 영상촬영 (시간)","unit":"시간","price":150000,"note":"","source":"현두"},
+      {"name":"[Deluxe] 스튜디오 (시간)","unit":"시간","price":70000,"note":"","source":"현두"},
+      {"name":"[Deluxe] 모델","unit":"건","price":400000,"note":"모델 5시간 기준","source":"현두"},
+      {"name":"[Deluxe] 촬영기획 (콘티)","unit":"건","price":500000,"note":"","source":"현두"},
+      {"name":"[Deluxe] 편집","unit":"건","price":1000000,"note":"20초 1개 / 40초 1개","source":"현두"},
+      {"name":"[Deluxe] 광고심의 대행","unit":"건","price":800000,"note":"수정 2~3회 / 심의 수수료 별도","source":"현두"},
+      {"name":"[Premium] 영상촬영 (시간)","unit":"시간","price":150000,"note":"","source":"현두"},
+      {"name":"[Premium] 스튜디오 (시간)","unit":"시간","price":70000,"note":"","source":"현두"},
+      {"name":"[Premium] 모델","unit":"건","price":300000,"note":"모델 5시간 기준","source":"현두"},
+      {"name":"[Premium] 촬영기획 (콘티)","unit":"건","price":500000,"note":"","source":"현두"},
+      {"name":"[Premium] 편집","unit":"건","price":1000000,"note":"20초 1개 / 40초 1개","source":"현두"},
+      {"name":"[Premium] 광고심의 대행","unit":"건","price":1500000,"note":"수정 4회 이상 / 심의 수수료 별도","source":"현두"},
+      {"name":"박람회/홍보 영상 제작","unit":"건","price":300000,"note":"리사이징, 홈페이지 무빙, BGM","source":"올비"},
+      {"name":"광고 영상/배너 제작 (지면 광고용)","unit":"건","price":400000,"note":"","source":"데코리아"}
+    ]
+  },
+  "박람회_팝업_부스": {
+    "description": "박람회 부스 디자인·집기 발주·실비 출력물",
+    "items": [
+      {"name":"박람회 부스 디자인/아이디어 기획","unit":"건","price":1000000,"note":"디자인 시안 포함, 설치비 포함","source":"올비"},
+      {"name":"박람회 부스 기획 (라지)","unit":"건","price":1000000,"note":"리빙박람회 규모","source":"데코리아"},
+      {"name":"팝업스토어 기획","unit":"건","price":500000,"note":"교보문고 팝업 규모","source":"데코리아"},
+      {"name":"팝업스토어 제작","unit":"건","price":1200000,"note":"","source":"데코리아"},
+      {"name":"박람회 집기 및 물품 발주 대행","unit":"건","price":400000,"note":"주최사 직접 소통, 렌탈/출력물 업체 등","source":"올비"},
+      {"name":"박람회 집기 구매 및 발주 대행 (라지)","unit":"건","price":800000,"note":"데코리아 라인","source":"데코리아"},
+      {"name":"족자배너 디자인 (3m, 면당)","unit":"면","price":400000,"note":"AI이미지 제작 포함","source":"올비"},
+      {"name":"족자배너 디자인 (소형)","unit":"건","price":100000,"note":"비건페스타 규모","source":"데코리아"},
+      {"name":"엑스배너 디자인","unit":"건","price":150000,"note":"","source":"데코리아"},
+      {"name":"A4 배너 디자인","unit":"건","price":100000,"note":"","source":"데코리아"},
+      {"name":"액자배너 디자인","unit":"건","price":100000,"note":"","source":"데코리아"},
+      {"name":"배너 디자인 (사무실 출력 포함)","unit":"건","price":150000,"note":"A4*3 + A3*1 등","source":"올비"},
+      {"name":"시트지 디자인","unit":"종","price":40000,"note":"","source":"데코리아"},
+      {"name":"폼로고 디자인","unit":"건","price":40000,"note":"","source":"올비"},
+      {"name":"페트배너 (로고스티커)","unit":"건","price":40000,"note":"","source":"올비"},
+      {"name":"(실비) 족자배너 인쇄 (1000x2400)","unit":"건","price":98000,"note":"실비 - 실제 청구 기준","source":"올비"},
+      {"name":"(실비) 시트지 인쇄 (로고)","unit":"건","price":25000,"note":"실비","source":"올비"},
+      {"name":"(실비) 로고 스카시 (전자레인지 모양 등)","unit":"건","price":180000,"note":"실비","source":"올비"},
+      {"name":"(실비) 집기 및 가구 렌탈 (1식)","unit":"건","price":1520000,"note":"실비 - 규모별 변동","source":"올비"},
+      {"name":"(실비) 실사 출력물/모형/소품 구매 (1식)","unit":"건","price":1782000,"note":"실비 - 규모별 변동","source":"데코리아"},
+      {"name":"(실비) 실사 출력","unit":"건","price":200000,"note":"비건페스타 규모","source":"데코리아"}
+    ]
+  },
+  "마케팅_및_운영": {
+    "description": "PR·운영·컨설팅 등 정기/단발성 마케팅 업무",
+    "items": [
+      {"name":"월간 컨설팅 비용","unit":"월","price":3500000,"note":"월간 단가","source":"데코리아"},
+      {"name":"월간 SNS 운영","unit":"월","price":2500000,"note":"월간 단가","source":"데코리아"},
+      {"name":"뉴스보도 3건 (실비만 청구)","unit":"건","price":480000,"note":"실비만 청구","source":"올비"},
+      {"name":"(실비) 국민일보 지면 광고 집행","unit":"건","price":3000000,"note":"실비 - 매체비","source":"데코리아"},
+      {"name":"(실비) 국민일보 영상 광고 집행","unit":"건","price":3000000,"note":"실비 - 매체비","source":"데코리아"}
+    ]
+  }
+};
+
+// ===== Firebase 설정 =====
+const firebaseConfig = {
+  apiKey: "AIzaSyBI4GLUz7KPZMZrtu94XQ1lijbf8nnVdX8",
+  authDomain: "quote-f7608.firebaseapp.com",
+  projectId: "quote-f7608",
+  storageBucket: "quote-f7608.firebasestorage.app",
+  messagingSenderId: "394470233679",
+  appId: "1:394470233679:web:886754e900369f9b8d3c3a"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ===== 비밀번호 보호 =====
+// 비밀번호 변경 시 이 줄을 수정하세요
+const ACCESS_PASSWORD = "bel202302!";
+
+function submitPassword() {
+  const val = document.getElementById('pw-input').value;
+  if (val === ACCESS_PASSWORD) {
+    sessionStorage.setItem('belcom_auth', 'ok');
+    document.getElementById('lock-screen').classList.add('hidden');
+    initApp();
+  } else {
+    document.getElementById('pw-error').style.display = 'block';
+    document.getElementById('pw-input').value = '';
+    setTimeout(() => document.getElementById('pw-input').focus(), 50);
+  }
+}
+
+function logout() {
+  sessionStorage.removeItem('belcom_auth');
+  if (priceUnsub) { priceUnsub(); priceUnsub = null; }
+  if (histUnsub)  { histUnsub();  histUnsub  = null; }
+  document.getElementById('lock-screen').classList.remove('hidden');
+  setSyncStatus('idle', '');
+}
+
+// ===== 동기화 상태 표시 =====
+function setSyncStatus(status, text) {
+  const dot = document.getElementById('sync-dot');
+  const txt = document.getElementById('sync-text');
+  if (!dot) return;
+  dot.className = 'sync-dot' + (status==='syncing'?' syncing':status==='error'?' error':'');
+  txt.textContent = text !== undefined ? text
+    : status==='ok'      ? '동기화됨'
+    : status==='syncing' ? '동기화 중...'
+    : status==='error'   ? '오프라인' : '';
+}
+
+// ===== 상태 =====
+const DEFAULT_NOTE = '1. 상기 견적서 유효기간은 2주일 입니다.\n2. 상기 견적서 타 업체 공개를 금합니다.';
+let priceData    = {};
+let quoteItems   = [];
+let quoteHistory = [];
+let editingQuoteId = null;
+let logoBase64   = null;
+let priceUnsub   = null;
+let histUnsub    = null;
+const LS_PRICE   = 'belcom_price_v1';
+const LS_HISTORY = 'belcom_history_v1';
+
+// ===== 유틸 =====
+function fmt(n)   { return Number(n||0).toLocaleString('ko-KR'); }
+function esc(s)   { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function today()  { return new Date().toISOString().split('T')[0]; }
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+// ===== 로고 로드 =====
+function loadLogoAsBase64() {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width  = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        logoBase64 = canvas.toDataURL('image/jpeg').split(',')[1];
+      } catch(e) {}
+      resolve();
+    };
+    img.onerror = () => resolve();
+    img.src = '벨콤비즈니스 로고.jpg';
+  });
+}
+
+// ===== LocalStorage (캐시 / 오프라인 폴백) =====
+function savePriceLS()    { localStorage.setItem(LS_PRICE,   JSON.stringify(priceData)); }
+function loadHistoryLS()  { try { return JSON.parse(localStorage.getItem(LS_HISTORY)||'[]'); } catch(e) { return []; } }
+function saveHistoryLS(h) { localStorage.setItem(LS_HISTORY, JSON.stringify(h)); }
+function loadHistory()    { return quoteHistory; } // 하위 호환용
+
+// ===== Firestore: 단가표 =====
+async function saveCategoryToFS(cat) {
+  setSyncStatus('syncing');
+  try {
+    const order = Object.keys(priceData).indexOf(cat);
+    await db.collection('pricelist').doc(cat).set({ ...priceData[cat], _order: order });
+    setSyncStatus('ok');
+  } catch(e) {
+    console.error('Firestore write error:', e);
+    setSyncStatus('error', '저장 실패');
+  }
+}
+
+async function deleteCategoryFromFS(cat) {
+  try { await db.collection('pricelist').doc(cat).delete(); }
+  catch(e) { console.error('Firestore delete error:', e); }
+}
+
+async function saveAllPriceToFS() {
+  setSyncStatus('syncing');
+  try {
+    const snap  = await db.collection('pricelist').get();
+    const batch = db.batch();
+    snap.forEach(d => batch.delete(d.ref));
+    let ord = 0;
+    Object.keys(priceData).forEach(cat => {
+      batch.set(db.collection('pricelist').doc(cat), { ...priceData[cat], _order: ord++ });
+    });
+    await batch.commit();
+    setSyncStatus('ok');
+  } catch(e) {
+    console.error('Firestore batch error:', e);
+    setSyncStatus('error', '저장 실패');
+  }
+}
+
+// 단가표 실시간 리스너 (onSnapshot)
+function setupPriceListener() {
+  return new Promise(resolve => {
+    let resolved = false;
+    const done = () => { if (!resolved) { resolved = true; resolve(); } };
+    priceUnsub = db.collection('pricelist').onSnapshot(async snap => {
+      if (snap.empty) {
+        // Firestore 비어있음 → LocalStorage or 기본 데이터로 초기화
+        const lsRaw = localStorage.getItem(LS_PRICE);
+        try { priceData = lsRaw ? JSON.parse(lsRaw) : clone(DEFAULT_PRICE_DATA); }
+        catch(e) { priceData = clone(DEFAULT_PRICE_DATA); }
+        await saveAllPriceToFS();
+        done();
+        return;
+      }
+      const sorted = snap.docs.slice().sort((a,b) => (a.data()._order||0)-(b.data()._order||0));
+      const nd = {};
+      sorted.forEach(d => { const {_order,...rest} = d.data(); nd[d.id] = rest; });
+      priceData = nd;
+      savePriceLS();
+      renderCategorySelect(); renderItemList();
+      if (document.getElementById('tab-price').classList.contains('active')) renderPriceTab();
+      setSyncStatus('ok');
+      done();
+    }, err => {
+      console.error('Price listener error:', err);
+      setSyncStatus('error', '오프라인');
+      const lsRaw = localStorage.getItem(LS_PRICE);
+      try { priceData = lsRaw ? JSON.parse(lsRaw) : clone(DEFAULT_PRICE_DATA); }
+      catch(e) { priceData = clone(DEFAULT_PRICE_DATA); }
+      done();
+    });
+  });
+}
+
+// ===== Firestore: 견적 이력 =====
+function setupHistoryListener() {
+  return new Promise(resolve => {
+    let resolved = false;
+    const done = () => { if (!resolved) { resolved = true; resolve(); } };
+    histUnsub = db.collection('quotes').orderBy('savedAt','desc').onSnapshot(snap => {
+      quoteHistory = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (document.getElementById('tab-history').classList.contains('active')) renderHistory();
+      setSyncStatus('ok');
+      done();
+    }, err => {
+      console.error('History listener error:', err);
+      quoteHistory = loadHistoryLS();
+      done();
+    });
+  });
+}
+
+// ===== 앱 초기화 (인증 통과 후 호출) =====
+async function initApp() {
+  document.getElementById('inp-date').value = today();
+  await loadLogoAsBase64();
+  setSyncStatus('syncing', '연결 중...');
+  await Promise.all([setupPriceListener(), setupHistoryListener()]);
+  renderCategorySelect(); renderItemList(); renderQuoteTable();
+}
+
+// ===== 탭 전환 =====
+function switchTab(btn, name) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'history') renderHistory();
+  if (name === 'price') renderPriceTab();
+}
+
+function goToQuoteTab() {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-quote').classList.add('active');
+  document.querySelectorAll('.tab-btn')[0].classList.add('active');
+}
+
+// ===== 모달 =====
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function closeModalOnBg(e, id) { if (e.target === document.getElementById(id)) closeModal(id); }
+
+// ===== 탭1: 견적 작성 =====
+function renderCategorySelect() {
+  const sel = document.getElementById('cat-select');
+  const cur = sel.value;
+  sel.innerHTML = Object.keys(priceData).map(k =>
+    `<option value="${esc(k)}"${k===cur?' selected':''}>${k.replace(/_/g,' ')}</option>`
+  ).join('');
+  if (!sel.value && Object.keys(priceData).length) sel.value = Object.keys(priceData)[0];
+}
+
+function renderItemList() {
+  const cat = document.getElementById('cat-select').value;
+  const list = document.getElementById('item-list');
+  const items = priceData[cat] ? priceData[cat].items : [];
+  if (!items.length) { list.innerHTML = '<div class="empty-msg">항목이 없습니다</div>'; return; }
+  list.innerHTML = items.map((item, i) =>
+    `<button class="item-btn" onclick="openQtyModal('${esc(cat)}',${i})">
+      <span class="item-name">${esc(item.name)}</span>
+      <span class="item-price">${fmt(item.price)}/${item.unit}</span>
+    </button>`
+  ).join('');
+}
+
+// 수량 모달
+let _pendingCat = null, _pendingIdx = null;
+function openQtyModal(cat, idx) {
+  _pendingCat = cat; _pendingIdx = idx;
+  const item = priceData[cat].items[idx];
+  document.getElementById('qty-modal-title').textContent = item.name;
+  document.getElementById('m-name').value = item.name;
+  document.getElementById('m-unit').value = item.unit;
+  document.getElementById('m-qty').value = 1;
+  document.getElementById('m-price').value = item.price;
+  document.getElementById('m-note').value = item.note || '';
+  document.getElementById('qty-modal').classList.add('open');
+  setTimeout(() => document.getElementById('m-qty').select(), 50);
+}
+
+function addItemToQuote() {
+  const name = document.getElementById('m-name').value.trim();
+  if (!name) { alert('품명을 입력하세요.'); return; }
+  const unit = document.getElementById('m-unit').value.trim();
+  const qty = parseFloat(document.getElementById('m-qty').value) || 1;
+  const price = parseFloat(document.getElementById('m-price').value) || 0;
+  const note = document.getElementById('m-note').value.trim();
+  quoteItems.push({ name, unit, qty, price, note });
+  closeModal('qty-modal');
+  renderQuoteTable();
+}
+
+function renderQuoteTable() {
+  const tbody = document.getElementById('quote-tbody');
+  if (!quoteItems.length) {
+    tbody.innerHTML = `<tr><td colspan="9" class="empty-msg">좌측에서 항목을 선택해 추가하세요</td></tr>`;
+    updateTotals(); return;
+  }
+  tbody.innerHTML = quoteItems.map((item, i) => {
+    const sup = item.qty * item.price;
+    const tax = Math.round(sup * 0.1);
+    return `<tr${item.isExpense?' class="expense-row"':''}>
+      <td class="td-no">${i+1}</td>
+      <td><input class="editable" value="${esc(item.name)}" onchange="updateItem(${i},'name',this.value)" style="min-width:130px;width:100%"></td>
+      <td class="td-ctr"><input class="editable" value="${esc(item.unit)}" onchange="updateItem(${i},'unit',this.value)" style="width:44px;text-align:center"></td>
+      <td class="td-num"><input class="editable" type="number" value="${item.qty}" onchange="updateItem(${i},'qty',this.value)" style="width:52px;text-align:right"></td>
+      <td class="td-num"><input class="editable" type="number" value="${item.price}" onchange="updateItem(${i},'price',this.value)" style="width:100px;text-align:right"></td>
+      <td class="td-num" data-sup="${i}">${fmt(sup)}</td>
+      <td class="td-num" data-tax="${i}">${fmt(tax)}</td>
+      <td><input class="editable" value="${esc(item.note||'')}" onchange="updateItem(${i},'note',this.value)" style="min-width:80px;width:100%"></td>
+      <td class="td-act"><button class="btn btn-danger btn-sm" onclick="deleteItem(${i})">삭제</button></td>
+    </tr>`;
+  }).join('');
+  updateTotals();
+}
+
+function updateItem(i, field, val) {
+  if (field === 'qty' || field === 'price') quoteItems[i][field] = parseFloat(val) || 0;
+  else quoteItems[i][field] = val;
+  if (field === 'qty' || field === 'price') {
+    const sup = quoteItems[i].qty * quoteItems[i].price;
+    const tax = Math.round(sup * 0.1);
+    const supEl = document.querySelector(`[data-sup="${i}"]`);
+    const taxEl = document.querySelector(`[data-tax="${i}"]`);
+    if (supEl) supEl.textContent = fmt(sup);
+    if (taxEl) taxEl.textContent = fmt(tax);
+  }
+  updateTotals();
+}
+
+function deleteItem(i) {
+  quoteItems.splice(i, 1);
+  renderQuoteTable();
+}
+
+function updateTotals() {
+  let sup = 0, tax = 0;
+  quoteItems.forEach(it => { const s = it.qty * it.price; sup += s; tax += Math.round(s * 0.1); });
+  document.getElementById('total-supply').textContent = fmt(sup);
+  document.getElementById('total-tax').textContent = fmt(tax);
+  document.getElementById('total-grand').textContent = fmt(sup + tax);
+}
+
+function clearQuote() {
+  if (!confirm('견적 내역을 초기화하시겠습니까?')) return;
+  quoteItems = []; editingQuoteId = null;
+  document.getElementById('inp-client').value = '';
+  document.getElementById('inp-project').value = '';
+  document.getElementById('inp-date').value = today();
+  document.getElementById('inp-note').value = DEFAULT_NOTE;
+  renderQuoteTable();
+}
+
+function toggleExpenseForm() {
+  const form = document.getElementById('expense-form');
+  const btn  = document.getElementById('expense-toggle-btn');
+  const open = form.classList.toggle('open');
+  btn.textContent = open ? '✕ 실비 입력 닫기' : '＋ 실비 항목 직접 입력';
+}
+
+function addExpenseItem() {
+  const name = document.getElementById('e-name').value.trim();
+  if (!name) { alert('품명을 입력하세요.'); return; }
+  const qty   = parseFloat(document.getElementById('e-qty').value)   || 1;
+  const unit  = document.getElementById('e-unit').value.trim()       || '건';
+  const price = parseFloat(document.getElementById('e-price').value) || 0;
+  const note  = document.getElementById('e-note').value.trim();
+  quoteItems.push({ name, unit, qty, price, note, isExpense: true });
+  document.getElementById('e-name').value  = '';
+  document.getElementById('e-price').value = '';
+  document.getElementById('e-qty').value   = 1;
+  document.getElementById('e-note').value  = '(실비)';
+  renderQuoteTable();
+}
+
+async function saveQuote() {
+  const client = document.getElementById('inp-client').value.trim();
+  if (!client) { alert('수신처를 입력하세요.'); return; }
+  if (!quoteItems.length) { alert('견적 항목이 없습니다.'); return; }
+  const sup = quoteItems.reduce((s,it)=>s+it.qty*it.price, 0);
+  const tax = quoteItems.reduce((s,it)=>s+Math.round(it.qty*it.price*0.1), 0);
+  const entry = {
+    id:      editingQuoteId || Date.now().toString(),
+    client,  project: document.getElementById('inp-project').value.trim(),
+    date:    document.getElementById('inp-date').value,
+    note:    document.getElementById('inp-note').value,
+    items:   clone(quoteItems), supply: sup, tax, total: sup+tax,
+    savedAt: new Date().toISOString()
+  };
+  setSyncStatus('syncing');
+  try {
+    await db.collection('quotes').doc(entry.id).set(entry);
+    editingQuoteId = entry.id;
+    // 로컬 캐시 업데이트
+    const hist = loadHistoryLS();
+    const idx  = hist.findIndex(h=>h.id===entry.id);
+    if (idx>=0) hist[idx]=entry; else hist.unshift(entry);
+    saveHistoryLS(hist);
+    setSyncStatus('ok');
+    alert('견적이 저장되었습니다.');
+  } catch(e) {
+    console.error('Save quote error:', e);
+    // 오프라인 시 로컬에만 저장
+    const hist = loadHistoryLS();
+    const idx  = hist.findIndex(h=>h.id===entry.id);
+    if (idx>=0) hist[idx]=entry; else hist.unshift(entry);
+    saveHistoryLS(hist);
+    quoteHistory = loadHistoryLS();
+    editingQuoteId = entry.id;
+    setSyncStatus('error', '오프라인 저장');
+    alert('견적이 저장되었습니다. (오프라인 모드)');
+  }
+}
+
+// ===== 엑셀 다운로드 (PDF와 동일한 레이아웃) =====
+async function exportExcel() {
+  if (!quoteItems.length) { alert('견적 항목이 없습니다.'); return; }
+  const client   = document.getElementById('inp-client').value  || '(미입력)';
+  const project  = document.getElementById('inp-project').value || '';
+  const date     = document.getElementById('inp-date').value;
+  const noteText = document.getElementById('inp-note').value;
+  const sup = quoteItems.reduce((s,it)=>s+it.qty*it.price,0);
+  const tax = quoteItems.reduce((s,it)=>s+Math.round(it.qty*it.price*0.1),0);
+  const total = sup + tax;
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = '벨콤 견적 시스템';
+  const ws = wb.addWorksheet('견적서');
+  ws.columns = [{width:6},{width:36},{width:10},{width:14},{width:15},{width:13},{width:28}];
+
+  // 공통 헬퍼
+  const cell = (addr) => ws.getCell(addr);
+  const merge = (r) => { try { ws.mergeCells(r); } catch(e){} };
+  const font = (name,size,bold,argb) => ({name:'맑은 고딕',size,bold:!!bold,color:{argb:argb||'FF222222'}});
+  const fill = (argb) => ({type:'pattern',pattern:'solid',fgColor:{argb}});
+  const align = (h,v='middle') => ({horizontal:h,vertical:v,wrapText:false});
+  const bdr = (s,argb='FFCCCCCC') => ({style:s,color:{argb}});
+  const allBorder = (s,argb) => ({top:bdr(s,argb),left:bdr(s,argb),bottom:bdr(s,argb),right:bdr(s,argb)});
+
+  // ━━━ 1. 문서 헤더 (PDF와 동일한 3열: 좌=로고 34% / 중=제목 32% / 우=회사 34%) ━━━
+  ws.getRow(1).height = 32;
+  ws.getRow(2).height = 18;
+  ws.getRow(3).height = 18;
+  ws.getRow(4).height = 10;
+
+  // 로고 (좌측 A1:B4 — A:6 + B:36 = 42ch ≈ 34%)
+  merge('A1:B4');
+  if (logoBase64) {
+    const imgId = wb.addImage({base64:logoBase64, extension:'jpeg'});
+    ws.addImage(imgId, {tl:{col:0,row:0}, ext:{width:170, height:72}});
+  } else {
+    const lc = cell('A1');
+    lc.value = '벨콤비즈니스';
+    lc.font  = font('맑은 고딕', 14, true, 'FF1A3A5C');
+    lc.alignment = align('center');
+  }
+
+  // 견적서 제목 (중앙 C1:E4 — C:10 + D:14 + E:15 = 39ch ≈ 32%)
+  merge('C1:E4');
+  const tc = cell('C1');
+  tc.value     = '견  적  서';
+  tc.font      = font('맑은 고딕', 22, true, 'FF1A3A5C');
+  tc.alignment = align('center');
+
+  // 회사명 (우측 F1:G1 — F:13 + G:28 = 41ch ≈ 34%)
+  merge('F1:G1');
+  const cc = cell('F1');
+  cc.value     = '㈜  벨  콤';
+  cc.font      = font('맑은 고딕', 12, true, 'FF1A3A5C');
+  cc.alignment = align('right');
+
+  // 주소 (F2:G2)
+  merge('F2:G2');
+  const ac = cell('F2');
+  ac.value     = '경기도 고양시 덕양구 청초로 10, B동 707호';
+  ac.font      = font('맑은 고딕', 9, false, 'FF555555');
+  ac.alignment = align('right');
+
+  // 대표 (F3:G3)
+  merge('F3:G3');
+  const rc = cell('F3');
+  rc.value     = '대표 박준선';
+  rc.font      = font('맑은 고딕', 9, false, 'FF555555');
+  rc.alignment = align('right');
+
+  // ━━━ 2. 구분선 Row 5 ━━━
+  ws.getRow(5).height = 8;
+  merge('A5:G5');
+  cell('A5').border = {bottom:{style:'medium',color:{argb:'FF1A3A5C'}}};
+
+  // ━━━ 3. 정보 행 (PDF와 동일: 수신처 → 프로젝트? → 견적일자 세로 배치) ━━━
+  const setInfo = (addr, val, bold=false) => {
+    const c = cell(addr);
+    c.value = val;
+    c.font  = font('맑은 고딕', 10, bold);
+    c.alignment = align('left');
+  };
+
+  let R = 6;
+  ws.getRow(R).height = 22;
+  setInfo(`A${R}`, '수 신 처', true);
+  merge(`B${R}:G${R}`); setInfo(`B${R}`, client);
+  R++;
+
+  if (project) {
+    ws.getRow(R).height = 22;
+    setInfo(`A${R}`, '프로젝트', true);
+    merge(`B${R}:G${R}`); setInfo(`B${R}`, project);
+    R++;
+  }
+
+  ws.getRow(R).height = 22;
+  setInfo(`A${R}`, '견적일자', true);
+  merge(`B${R}:G${R}`); setInfo(`B${R}`, date);
+  R++;
+
+  // ━━━ 4. 아래와 같이 견적합니다 ━━━
+  ws.getRow(R).height = 22;
+  merge(`A${R}:G${R}`);
+  const mc = cell(`A${R}`);
+  mc.value = '아래와 같이 견적합니다.';
+  mc.font  = font('맑은 고딕', 10);
+  mc.alignment = align('left');
+  R++;
+
+  // ━━━ 5. 합계금액 박스 ━━━
+  ws.getRow(R).height = 30;
+  merge(`A${R}:G${R}`);
+  const tot = cell(`A${R}`);
+  tot.value     = `합계금액 (공급가액 + 세액)  :  ${fmt(total)} 원`;
+  tot.font      = font('맑은 고딕', 13, true, 'FFC0392B');
+  tot.alignment = align('center');
+  tot.fill      = fill('FFFFF8F0');
+  tot.border    = allBorder('medium','FF1A3A5C');
+  R++;
+
+  // ━━━ 6. 공백 ━━━
+  ws.getRow(R).height = 6; R++;
+
+  // ━━━ 7. 테이블 헤더 ━━━
+  const COLS = ['A','B','C','D','E','F','G'];
+  const HDR  = ['No.','품명','수량','공급단가','공급가액','세액','비고'];
+  const ALGN = ['center','left','center','right','right','right','left'];
+  ws.getRow(R).height = 24;
+  COLS.forEach((col,i) => {
+    const c = cell(`${col}${R}`);
+    c.value     = HDR[i];
+    c.font      = font('맑은 고딕', 10, true, 'FF1A3A5C');
+    c.alignment = align(ALGN[i]);
+    c.fill      = fill('FFE8EDF5');
+    c.border    = {
+      top:   bdr('medium','FF1A3A5C'),
+      left:  bdr('thin','FF8899BB'),
+      bottom:bdr('medium','FF1A3A5C'),
+      right: bdr('thin','FF8899BB')
+    };
+  });
+  R++;
+
+  // ━━━ 8. 항목 rows ━━━
+  const thinBorder = allBorder('thin','FFCCCCCC');
+  quoteItems.forEach((it,i) => {
+    const s = it.qty*it.price, t = Math.round(s*0.1);
+    const vals = [i+1, it.name, `${it.qty} ${it.unit}`, it.price, s, t, it.note||''];
+    ws.getRow(R).height = 18;
+    COLS.forEach((col,ci) => {
+      const c = cell(`${col}${R}`);
+      c.value     = vals[ci];
+      c.font      = font('맑은 고딕', 10);
+      c.alignment = align(ALGN[ci]);
+      c.border    = thinBorder;
+      if (it.isExpense) c.fill = fill('FFFFFBEE');
+      if (ci>=3 && ci<=5) c.numFmt = '#,##0';
+    });
+    R++;
+  });
+
+  // ━━━ 9. 합계 row ━━━
+  ws.getRow(R).height = 22;
+  const sumBdr = {top:bdr('medium','FF1A3A5C'),left:bdr('thin'),bottom:bdr('medium','FF1A3A5C'),right:bdr('thin')};
+  ['합  계',null,null,null,sup,tax,null].forEach((v,ci) => {
+    const c = cell(`${COLS[ci]}${R}`);
+    c.value     = v;
+    c.font      = font('맑은 고딕', 10, true);
+    c.alignment = align(ci<=3?'center':ALGN[ci]);
+    c.fill      = fill('FFF0F2F5');
+    c.border    = sumBdr;
+    if (ci>=4 && ci<=5) c.numFmt = '#,##0';
+  });
+  merge(`A${R}:D${R}`);
+  R += 2;
+
+  // ━━━ 10. NOTE ━━━
+  const noteLines = noteText.split('\n').filter(l=>l.trim());
+  ws.getRow(R).height = 15;
+  merge(`A${R}:G${R}`);
+  const nc = cell(`A${R}`);
+  nc.value = 'NOTE';
+  nc.font  = font('맑은 고딕', 9, true, 'FF666666');
+  nc.fill  = fill('FFF5F5F5');
+  nc.border= allBorder('thin','FFDDDDDD');
+  R++;
+  noteLines.forEach(txt => {
+    ws.getRow(R).height = 15;
+    merge(`A${R}:G${R}`);
+    const lc = cell(`A${R}`);
+    lc.value  = txt;
+    lc.font   = font('맑은 고딕', 9, false, 'FF666666');
+    lc.fill   = fill('FFF5F5F5');
+    lc.border = allBorder('thin','FFDDDDDD');
+    R++;
+  });
+
+  // ━━━ 다운로드 ━━━
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `견적서_${client}_${date}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ===== 인쇄 =====
+function printQuote() {
+  const client = document.getElementById('inp-client').value || '(미입력)';
+  const project = document.getElementById('inp-project').value || '';
+  const date = document.getElementById('inp-date').value;
+  const sup = quoteItems.reduce((s,it)=>s+it.qty*it.price,0);
+  const tax = quoteItems.reduce((s,it)=>s+Math.round(it.qty*it.price*0.1),0);
+  const noteText = document.getElementById('inp-note').value;
+  const noteLines = noteText.split('\n').filter(l=>l.trim()).map(l=>`<div>${l}</div>`).join('');
+  const S = (s) => `style="${s}"`;
+  const B = 'border:1px solid #aaa;';
+  const P = 'padding:5px 8px;';
+  const rows = quoteItems.map((it,i)=>{
+    const s=it.qty*it.price; const t=Math.round(s*0.1);
+    const bg = it.isExpense ? 'background:#fffbee;' : '';
+    return `<tr>
+      <td ${S(B+P+'text-align:center;'+bg)}>${i+1}</td>
+      <td ${S(B+P+bg)}>${it.name}${it.isExpense?' <span style="font-size:9pt;color:#b8860b">(실비)</span>':''}</td>
+      <td ${S(B+P+'text-align:center;'+bg)}>${it.qty} ${it.unit}</td>
+      <td ${S(B+P+'text-align:right;'+bg)}>${fmt(it.price)}</td>
+      <td ${S(B+P+'text-align:right;'+bg)}>${fmt(s)}</td>
+      <td ${S(B+P+'text-align:right;'+bg)}>${fmt(t)}</td>
+      <td ${S(B+P+bg)}>${it.note||''}</td>
+    </tr>`;
+  }).join('');
+  const logoSrc = logoBase64
+    ? `data:image/jpeg;base64,${logoBase64}`
+    : '벨콤비즈니스 로고.jpg';
+  document.getElementById('print-area').innerHTML = `
+<div style="font-family:'맑은 고딕','Malgun Gothic',sans-serif;padding:24px 36px;max-width:960px;margin:0 auto;font-size:10pt;color:#000">
+  <table style="width:100%;border-collapse:collapse;margin-bottom:6px">
+    <tr>
+      <td style="vertical-align:middle;width:34%">
+        <img src="${logoSrc}" style="max-height:64px;max-width:200px;object-fit:contain" onerror="this.style.display='none'">
+      </td>
+      <td style="vertical-align:middle;text-align:center;width:32%">
+        <div style="font-size:22pt;font-weight:700;letter-spacing:12px;color:#1a3a5c">견  적  서</div>
+      </td>
+      <td style="vertical-align:middle;text-align:right;width:34%">
+        <div style="font-size:12pt;font-weight:700;color:#1a3a5c">㈜  벨  콤</div>
+        <div style="font-size:8.5pt;margin-top:4px;color:#444">경기도 고양시 덕양구 청초로 10, B동 707호</div>
+        <div style="font-size:8.5pt;color:#444">대표 박준선</div>
+      </td>
+    </tr>
+  </table>
+  <div style="border-bottom:2.5px solid #1a3a5c;margin-bottom:12px"></div>
+  <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
+    <tr>
+      <td style="vertical-align:top;width:50%">
+        <table style="border-collapse:collapse">
+          <tr><td style="padding:3px 8px 3px 0;font-weight:700;width:72px">수 신 처</td><td style="padding:3px 0">${client}</td></tr>
+          ${project?`<tr><td style="padding:3px 8px 3px 0;font-weight:700">프로젝트</td><td style="padding:3px 0">${project}</td></tr>`:''}
+          <tr><td style="padding:3px 8px 3px 0;font-weight:700">견적일자</td><td style="padding:3px 0">${date}</td></tr>
+        </table>
+      </td>
+      <td></td>
+    </tr>
+  </table>
+  <p style="margin:12px 0 10px">아래와 같이 견적합니다.</p>
+  <div style="font-size:13pt;font-weight:700;text-align:center;border:2px solid #000;padding:9px;margin-bottom:14px">
+    합계금액 (공급가액 + 세액) &nbsp;: &nbsp;<span style="color:#c0392b">${fmt(sup+tax)}</span> 원
+  </div>
+  <table style="width:100%;border-collapse:collapse;font-size:9.5pt">
+    <thead>
+      <tr style="background:#f0f2f5">
+        <th ${S(B+P+'text-align:center;width:36px')}>No.</th>
+        <th ${S(B+P+'text-align:center')}>품명</th>
+        <th ${S(B+P+'text-align:center;width:80px')}>수량</th>
+        <th ${S(B+P+'text-align:center;width:100px')}>공급단가</th>
+        <th ${S(B+P+'text-align:center;width:100px')}>공급가액</th>
+        <th ${S(B+P+'text-align:center;width:80px')}>세액</th>
+        <th ${S(B+P+'text-align:center;width:120px')}>비고</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+    <tfoot>
+      <tr style="font-weight:700;background:#f8f9fa">
+        <td ${S(B+P+'text-align:center')} colspan="4">합  계</td>
+        <td ${S(B+P+'text-align:right')}>${fmt(sup)}</td>
+        <td ${S(B+P+'text-align:right')}>${fmt(tax)}</td>
+        <td ${S(B+P)}></td>
+      </tr>
+    </tfoot>
+  </table>
+  <div style="margin-top:16px;padding:10px 14px;background:#f5f5f5;border:1px solid #ddd;font-size:9pt">
+    <div style="font-weight:700;margin-bottom:5px">NOTE</div>
+    ${noteLines}
+  </div>
+</div>`;
+  window.print();
+}
+
+// ===== 탭2: 단가표 관리 =====
+function renderPriceTab() {
+  document.getElementById('price-container').innerHTML =
+    Object.keys(priceData).map(cat => buildCatCard(cat)).join('');
+}
+
+function buildCatCard(cat) {
+  const data = priceData[cat] || {description:'',items:[]};
+  const rows = (data.items||[]).map((item,i) => `
+    <tr>
+      <td><input class="editable" value="${esc(item.name)}" onchange="updatePI('${esc(cat)}',${i},'name',this.value)" style="width:100%;min-width:140px"></td>
+      <td><input class="editable" value="${esc(item.unit)}" onchange="updatePI('${esc(cat)}',${i},'unit',this.value)" style="width:48px;text-align:center"></td>
+      <td><input class="editable" type="number" value="${item.price}" onchange="updatePI('${esc(cat)}',${i},'price',this.value)" style="width:110px;text-align:right"></td>
+      <td><input class="editable" value="${esc(item.note||'')}" onchange="updatePI('${esc(cat)}',${i},'note',this.value)" style="width:100%;min-width:100px"></td>
+      <td><input class="editable" value="${esc(item.source||'')}" onchange="updatePI('${esc(cat)}',${i},'source',this.value)" style="width:80px"></td>
+      <td><button class="btn btn-danger btn-sm" onclick="deletePI('${esc(cat)}',${i})">삭제</button></td>
+    </tr>`).join('');
+  return `
+  <div class="cat-card">
+    <div class="cat-card-header">
+      <div class="cat-card-title">
+        <div class="cat-card-name">${cat.replace(/_/g,' ')}</div>
+        <div class="cat-card-desc">${esc(data.description||'')}</div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="renameCategory('${esc(cat)}')">이름 변경</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteCategory('${esc(cat)}')">삭제</button>
+    </div>
+    <table class="price-table">
+      <thead><tr><th>품명</th><th>단위</th><th>단가(원)</th><th>비고</th><th>출처</th><th style="width:56px">관리</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr class="add-item-row"><td colspan="6"><button class="btn btn-secondary btn-sm" onclick="addPI('${esc(cat)}')">+ 새 항목 추가</button></td></tr></tfoot>
+    </table>
+  </div>`;
+}
+
+function updatePI(cat, i, field, val) {
+  if (!priceData[cat] || !priceData[cat].items[i]) return;
+  priceData[cat].items[i][field] = field==='price' ? (parseFloat(val)||0) : val;
+  savePriceLS();
+  renderCategorySelect(); renderItemList();
+  saveCategoryToFS(cat);
+}
+
+function deletePI(cat, i) {
+  if (!confirm('이 항목을 삭제하시겠습니까?')) return;
+  priceData[cat].items.splice(i,1);
+  savePriceLS(); renderPriceTab(); renderCategorySelect(); renderItemList();
+  saveCategoryToFS(cat);
+}
+
+function addPI(cat) {
+  priceData[cat].items.push({name:'새 항목',unit:'건',price:0,note:'',source:''});
+  savePriceLS(); renderPriceTab(); renderCategorySelect(); renderItemList();
+  saveCategoryToFS(cat);
+}
+
+function addCategory() {
+  const name = prompt('새 카테고리 이름을 입력하세요:');
+  if (!name || !name.trim()) return;
+  const key = name.trim().replace(/\s+/g,'_');
+  if (priceData[key]) { alert('이미 존재하는 카테고리입니다.'); return; }
+  priceData[key] = {description:'',items:[]};
+  savePriceLS(); renderPriceTab(); renderCategorySelect();
+  saveCategoryToFS(key);
+}
+
+async function renameCategory(cat) {
+  const cur = cat.replace(/_/g,' ');
+  const name = prompt('새 이름을 입력하세요:', cur);
+  if (!name || !name.trim() || name.trim()===cur) return;
+  const newKey = name.trim().replace(/\s+/g,'_');
+  if (priceData[newKey]) { alert('이미 존재합니다.'); return; }
+  const rebuilt = {};
+  Object.keys(priceData).forEach(k => { rebuilt[k===cat ? newKey : k] = priceData[k]; });
+  priceData = rebuilt;
+  savePriceLS(); renderPriceTab(); renderCategorySelect(); renderItemList();
+  // Firestore: 새 문서 생성 + 옛 문서 삭제
+  await saveCategoryToFS(newKey);
+  await deleteCategoryFromFS(cat);
+}
+
+async function deleteCategory(cat) {
+  if (!confirm(`카테고리 "${cat.replace(/_/g,' ')}"을 삭제하시겠습니까?\n포함된 모든 항목이 삭제됩니다.`)) return;
+  delete priceData[cat];
+  savePriceLS(); renderPriceTab(); renderCategorySelect(); renderItemList();
+  await deleteCategoryFromFS(cat);
+}
+
+function exportPriceExcel() {
+  const aoa = [['카테고리','카테고리설명','품명','단위','단가','비고','출처']];
+  Object.keys(priceData).forEach(cat => {
+    const data = priceData[cat];
+    (data.items||[]).forEach(item => {
+      aoa.push([cat, data.description||'', item.name, item.unit||'', item.price||0, item.note||'', item.source||'']);
+    });
+  });
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch:22},{wch:32},{wch:42},{wch:8},{wch:12},{wch:32},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, ws, '단가표');
+  XLSX.writeFile(wb, '단가표.xlsx');
+}
+
+function importPriceExcel(e) {
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const wb = XLSX.read(ev.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if (rows.length < 2) { alert('데이터가 없습니다.'); return; }
+      // 헤더 행 건너뛰고 파싱: 카테고리, 카테고리설명, 품명, 단위, 단가, 비고, 출처
+      const newData = {};
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        const cat  = String(r[0]||'').trim();
+        const desc = String(r[1]||'').trim();
+        const name = String(r[2]||'').trim();
+        const unit = String(r[3]||'').trim();
+        const price= parseFloat(r[4])||0;
+        const note = String(r[5]||'').trim();
+        const src  = String(r[6]||'').trim();
+        if (!cat || !name) continue;
+        if (!newData[cat]) newData[cat] = {description: desc, items: []};
+        newData[cat].items.push({name, unit, price, note, source: src});
+      }
+      if (!Object.keys(newData).length) { alert('가져올 데이터가 없습니다.'); return; }
+      if (!confirm('현재 단가표를 가져온 파일로 교체하시겠습니까?')) return;
+      priceData = newData; savePriceLS();
+      renderPriceTab(); renderCategorySelect(); renderItemList();
+      saveAllPriceToFS().then(() => alert('단가표를 가져왔습니다.'));
+    } catch(err) { alert('파일을 읽을 수 없습니다.\n' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+  e.target.value = '';
+}
+
+// ===== 탭3: 견적 이력 =====
+function renderHistory() {
+  const el = document.getElementById('history-list');
+  if (!quoteHistory.length) { el.innerHTML='<div class="empty-msg">저장된 견적이 없습니다.</div>'; return; }
+  el.innerHTML = quoteHistory.map(h=>`
+    <div class="history-item" onclick="loadQuote('${h.id}')">
+      <div class="history-meta">
+        <div class="h-client">${esc(h.client)}</div>
+        <div class="h-project">${esc(h.project||'(프로젝트명 없음)')}</div>
+        <div class="h-date">${h.date} · 저장: ${(h.savedAt||'').substring(0,10)}</div>
+      </div>
+      <div class="history-amount">${fmt(h.total)}원</div>
+      <button class="btn btn-danger btn-sm" onclick="deleteQuote(event,'${h.id}')">삭제</button>
+    </div>`).join('');
+}
+
+function loadQuote(id) {
+  const entry = quoteHistory.find(h=>h.id===id);
+  if (!entry) return;
+  document.getElementById('inp-client').value  = entry.client;
+  document.getElementById('inp-project').value = entry.project||'';
+  document.getElementById('inp-date').value    = entry.date;
+  document.getElementById('inp-note').value    = entry.note || DEFAULT_NOTE;
+  quoteItems = clone(entry.items);
+  editingQuoteId = entry.id;
+  renderQuoteTable();
+  goToQuoteTab();
+}
+
+async function deleteQuote(e, id) {
+  e.stopPropagation();
+  if (!confirm('이 견적을 삭제하시겠습니까?')) return;
+  setSyncStatus('syncing');
+  try {
+    await db.collection('quotes').doc(id).delete();
+    setSyncStatus('ok');
+  } catch(err) {
+    console.error('Delete quote error:', err);
+    setSyncStatus('error', '삭제 실패');
+  }
+  // 로컬 캐시도 갱신
+  saveHistoryLS(loadHistoryLS().filter(h=>h.id!==id));
+  if (editingQuoteId===id) editingQuoteId=null;
+  // onSnapshot이 자동 재렌더
+}
+
+// ===== 키보드 단축키 =====
+document.addEventListener('keydown', e => {
+  if (document.getElementById('qty-modal').classList.contains('open')) {
+    if (e.key==='Enter') addItemToQuote();
+    if (e.key==='Escape') closeModal('qty-modal');
+  }
+});
+
+// ===== 시작: 인증 상태에 따라 진입 분기 =====
+if (sessionStorage.getItem('belcom_auth') === 'ok') {
+  document.getElementById('lock-screen').classList.add('hidden');
+  initApp();
+} else {
+  setTimeout(() => document.getElementById('pw-input').focus(), 100);
+}
+</script>
+</body>
+</html>
