@@ -7,8 +7,33 @@
 <title>벨콤 견적 시스템</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script type="module">
+  // Firebase Modular SDK v10.14.1 (named database 지원: v10.7.0+)
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+  import {
+    getFirestore, collection, doc, getDocs, setDoc, deleteDoc,
+    onSnapshot, orderBy, query, writeBatch
+  } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBI4GLUz7KPZMZrtu94XQ1lijbf8nnVdX8",
+    authDomain: "quote-f7608.firebaseapp.com",
+    projectId: "quote-f7608",
+    storageBucket: "quote-f7608.firebasestorage.app",
+    messagingSenderId: "394470233679",
+    appId: "1:394470233679:web:886754e900369f9b8d3c3a"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  // 'belcom' named database 사용 ((default) 아님)
+  const db = getFirestore(app, "belcom");
+
+  // 일반 inline script에서 사용할 수 있도록 window에 노출
+  window.fbDb = db;
+  window.fbFS = { collection, doc, getDocs, setDoc, deleteDoc, onSnapshot, orderBy, query, writeBatch };
+  window.dispatchEvent(new Event('firebase-ready'));
+  console.log('[Firebase] 초기화 완료 — database: "belcom"');
+</script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'맑은 고딕','Malgun Gothic',sans-serif;font-size:13px;background:#f0f2f5;color:#222;height:100vh;display:flex;flex-direction:column;overflow:hidden}
@@ -478,17 +503,51 @@ const DEFAULT_PRICE_DATA = {
   }
 };
 
-// ===== Firebase 설정 =====
-const firebaseConfig = {
-  apiKey: "AIzaSyBI4GLUz7KPZMZrtu94XQ1lijbf8nnVdX8",
-  authDomain: "quote-f7608.firebaseapp.com",
-  projectId: "quote-f7608",
-  storageBucket: "quote-f7608.firebasestorage.app",
-  messagingSenderId: "394470233679",
-  appId: "1:394470233679:web:886754e900369f9b8d3c3a"
-};
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
+// ===== Firebase (Modular SDK는 위쪽 <script type="module">에서 초기화됨) =====
+let db = null;
+let fbFS = null;
+
+function waitForFirebase() {
+  return new Promise(resolve => {
+    if (window.fbDb) { db = window.fbDb; fbFS = window.fbFS; resolve(); return; }
+    window.addEventListener('firebase-ready', () => {
+      db = window.fbDb; fbFS = window.fbFS; resolve();
+    }, { once: true });
+  });
+}
+
+// Modular API를 compat 스타일로 호출할 수 있게 해주는 얇은 래퍼
+function fsCollection(name) {
+  const colRef = fbFS.collection(db, name);
+  return {
+    _ref: colRef,
+    doc(id) {
+      const docRef = fbFS.doc(db, name, id);
+      return {
+        _ref: docRef,
+        set(data) { return fbFS.setDoc(docRef, data); },
+        delete() { return fbFS.deleteDoc(docRef); }
+      };
+    },
+    get() { return fbFS.getDocs(colRef); },
+    onSnapshot(onNext, onError) { return fbFS.onSnapshot(colRef, onNext, onError); },
+    orderBy(field, dir) {
+      const q = fbFS.query(colRef, fbFS.orderBy(field, dir));
+      return {
+        onSnapshot(onNext, onError) { return fbFS.onSnapshot(q, onNext, onError); }
+      };
+    }
+  };
+}
+
+function fsBatch() {
+  const b = fbFS.writeBatch(db);
+  return {
+    set(refOrWrapper, data) { b.set(refOrWrapper._ref || refOrWrapper, data); return this; },
+    delete(refOrWrapper)    { b.delete(refOrWrapper._ref || refOrWrapper);   return this; },
+    commit() { return b.commit(); }
+  };
+}
 
 // ===== 비밀번호 보호 =====
 // 비밀번호 변경 시 이 줄을 수정하세요
@@ -575,7 +634,7 @@ async function saveCategoryToFS(cat) {
   setSyncStatus('syncing');
   try {
     const order = Object.keys(priceData).indexOf(cat);
-    await db.collection('pricelist').doc(cat).set({ ...priceData[cat], _order: order });
+    await fsCollection('pricelist').doc(cat).set({ ...priceData[cat], _order: order });
     setSyncStatus('ok');
   } catch(e) {
     console.error('Firestore write error:', e);
@@ -584,19 +643,19 @@ async function saveCategoryToFS(cat) {
 }
 
 async function deleteCategoryFromFS(cat) {
-  try { await db.collection('pricelist').doc(cat).delete(); }
+  try { await fsCollection('pricelist').doc(cat).delete(); }
   catch(e) { console.error('Firestore delete error:', e); }
 }
 
 async function saveAllPriceToFS() {
   setSyncStatus('syncing');
   try {
-    const snap  = await db.collection('pricelist').get();
-    const batch = db.batch();
+    const snap  = await fsCollection('pricelist').get();
+    const batch = fsBatch();
     snap.forEach(d => batch.delete(d.ref));
     let ord = 0;
     Object.keys(priceData).forEach(cat => {
-      batch.set(db.collection('pricelist').doc(cat), { ...priceData[cat], _order: ord++ });
+      batch.set(fsCollection('pricelist').doc(cat), { ...priceData[cat], _order: ord++ });
     });
     await batch.commit();
     setSyncStatus('ok');
@@ -611,13 +670,27 @@ function setupPriceListener() {
   return new Promise(resolve => {
     let resolved = false;
     const done = () => { if (!resolved) { resolved = true; resolve(); } };
-    priceUnsub = db.collection('pricelist').onSnapshot(async snap => {
+    priceUnsub = fsCollection('pricelist').onSnapshot(async snap => {
       if (snap.empty) {
-        // Firestore 비어있음 → LocalStorage or 기본 데이터로 초기화
-        const lsRaw = localStorage.getItem(LS_PRICE);
-        try { priceData = lsRaw ? JSON.parse(lsRaw) : clone(DEFAULT_PRICE_DATA); }
-        catch(e) { priceData = clone(DEFAULT_PRICE_DATA); }
+        console.log('[단가표] Firestore 단가표 비어있음 — 초기 시드 수행');
+        // 1순위: 같은 도메인의 단가표.json 파일을 fetch
+        try {
+          console.log('[단가표] 단가표.json 로딩 중...');
+          const res = await fetch('단가표.json', { cache: 'no-store' });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          priceData = await res.json();
+          console.log('[단가표] 단가표.json 로딩 완료 — 카테고리 ' + Object.keys(priceData).length + '개');
+        } catch(e) {
+          // 2순위: LocalStorage 캐시 또는 내장 DEFAULT_PRICE_DATA
+          console.warn('[단가표] 단가표.json 로딩 실패 — 폴백 데이터 사용:', e.message);
+          const lsRaw = localStorage.getItem(LS_PRICE);
+          try { priceData = lsRaw ? JSON.parse(lsRaw) : clone(DEFAULT_PRICE_DATA); }
+          catch(err) { priceData = clone(DEFAULT_PRICE_DATA); }
+          console.log('[단가표] 폴백 데이터 카테고리 ' + Object.keys(priceData).length + '개');
+        }
+        console.log('[단가표] Firestore 업로드 중...');
         await saveAllPriceToFS();
+        console.log('[단가표] Firestore 업로드 완료');
         done();
         return;
       }
@@ -646,7 +719,7 @@ function setupHistoryListener() {
   return new Promise(resolve => {
     let resolved = false;
     const done = () => { if (!resolved) { resolved = true; resolve(); } };
-    histUnsub = db.collection('quotes').orderBy('savedAt','desc').onSnapshot(snap => {
+    histUnsub = fsCollection('quotes').orderBy('savedAt','desc').onSnapshot(snap => {
       quoteHistory = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       if (document.getElementById('tab-history').classList.contains('active')) renderHistory();
       setSyncStatus('ok');
@@ -661,9 +734,11 @@ function setupHistoryListener() {
 
 // ===== 앱 초기화 (인증 통과 후 호출) =====
 async function initApp() {
+  setSyncStatus('syncing', '연결 중...');
+  await waitForFirebase();
+  console.log('[App] Firebase 준비 완료 — 앱 초기화 시작');
   document.getElementById('inp-date').value = today();
   await loadLogoAsBase64();
-  setSyncStatus('syncing', '연결 중...');
   await Promise.all([setupPriceListener(), setupHistoryListener()]);
   renderCategorySelect(); renderItemList(); renderQuoteTable();
 }
@@ -838,7 +913,7 @@ async function saveQuote() {
   };
   setSyncStatus('syncing');
   try {
-    await db.collection('quotes').doc(entry.id).set(entry);
+    await fsCollection('quotes').doc(entry.id).set(entry);
     editingQuoteId = entry.id;
     // 로컬 캐시 업데이트
     const hist = loadHistoryLS();
@@ -1334,7 +1409,7 @@ async function deleteQuote(e, id) {
   if (!confirm('이 견적을 삭제하시겠습니까?')) return;
   setSyncStatus('syncing');
   try {
-    await db.collection('quotes').doc(id).delete();
+    await fsCollection('quotes').doc(id).delete();
     setSyncStatus('ok');
   } catch(err) {
     console.error('Delete quote error:', err);
