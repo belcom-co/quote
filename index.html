@@ -137,8 +137,8 @@ tbody tr:hover td{background:#fafbfd}
 .h-date{font-size:11px;color:#999;margin-top:2px}
 .history-amount{font-size:15px;font-weight:700;color:#c0392b;white-space:nowrap}
 /* Table borders */
-#quote-table th,#quote-table td,.price-table th,.price-table td{border:1px solid #d2d7e2}
-#quote-table th,.price-table th{border-bottom:2px solid #b0b8cc;background:#eceff5}
+#quote-table th,#quote-table td,.price-table th,.price-table td,.group-qtable th,.group-qtable td{border:1px solid #d2d7e2}
+#quote-table th,.price-table th,.group-qtable th{border-bottom:2px solid #b0b8cc;background:#eceff5}
 /* NOTE bar */
 .note-bar{padding:8px 16px;background:#fffdf7;border-top:1px solid #e8e3d0;display:flex;align-items:flex-start;gap:8px;flex-shrink:0}
 .note-bar>label{font-size:11px;font-weight:700;color:#888;padding-top:5px;white-space:nowrap;letter-spacing:.5px}
@@ -159,6 +159,20 @@ tr.expense-row td{background:#fffbee}
 tr.expense-row:hover td{background:#fff5d6}
 /* Misc */
 .empty-msg{text-align:center;padding:36px 16px;color:#bbb;font-size:13px}
+/* Group cards */
+.group-card{border:2px solid #d0d5dc;border-radius:6px;overflow:hidden;background:#fff}
+.group-card.active{border-color:#1a3a5c;box-shadow:0 0 0 2px #1a3a5c22}
+.group-card-header{padding:7px 10px;background:#eef1f7;display:flex;align-items:center;gap:6px;flex-wrap:wrap;cursor:pointer}
+.group-card-header:hover{background:#e4e8f5}
+.group-name-input{border:none;background:transparent;font-weight:700;font-size:13px;color:#1a3a5c;font-family:inherit;flex:1;min-width:100px;padding:2px 4px;border-radius:3px}
+.group-name-input:focus{outline:2px solid #1a3a5c;background:#fff}
+.group-sublabel-input{border:1px solid transparent;background:transparent;font-size:11px;color:#888;font-family:inherit;width:150px;padding:2px 4px;border-radius:3px}
+.group-sublabel-input:focus{outline:none;background:#fff;border-color:#cdd2da}
+.group-subtotal-row{background:#f0f4ff;padding:5px 12px;text-align:right;font-size:11px;color:#1a3a5c;font-weight:600;border-top:1px solid #d0d8f0}
+.active-group-badge{font-size:10px;color:#fff;background:#1a3a5c;padding:1px 8px;border-radius:10px;white-space:nowrap;flex-shrink:0}
+.ungrouped-section{border:1px dashed #d0d5dc;border-radius:6px;overflow:hidden}
+.ungrouped-header{padding:7px 12px;background:#f8f9fa;font-size:11px;font-weight:700;color:#888;border-bottom:1px solid #e0e4ea}
+#groups-container{padding:8px;display:flex;flex-direction:column;gap:8px}
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-track{background:#f0f2f5}
 ::-webkit-scrollbar-thumb{background:#ccc;border-radius:3px}
@@ -253,25 +267,11 @@ tr.expense-row:hover td{background:#fff5d6}
     <div class="right-panel">
       <div class="panel-header">
         <span class="panel-header-title">견적 내역</span>
-        <span style="font-size:11px;color:#aaa">항목 클릭 → 수량 입력 → 추가</span>
+        <span id="active-group-hint" style="font-size:11px;color:#aaa">그룹 선택 후 좌측에서 항목 추가</span>
+        <button class="btn btn-primary btn-sm" onclick="addGroup()" style="margin-left:auto">+ 새 그룹 추가</button>
       </div>
       <div class="quote-table-wrap">
-        <table id="quote-table">
-          <thead>
-            <tr>
-              <th class="td-no">No.</th>
-              <th style="min-width:140px">품명</th>
-              <th style="width:50px">단위</th>
-              <th style="width:60px">수량</th>
-              <th style="width:110px">공급단가</th>
-              <th style="width:110px">공급가액</th>
-              <th style="width:90px">세액</th>
-              <th style="min-width:80px">비고</th>
-              <th class="td-act">삭제</th>
-            </tr>
-          </thead>
-          <tbody id="quote-tbody"></tbody>
-        </table>
+        <div id="groups-container"></div>
       </div>
       <div class="totals-bar">
         <div class="total-item">공급가액 <span id="total-supply">0</span>원</div>
@@ -597,6 +597,9 @@ let priceUnsub   = null;
 let histUnsub    = null;
 const LS_PRICE   = 'belcom_price_v1';
 const LS_HISTORY = 'belcom_history_v1';
+let quoteGroups    = [];   // v2: [{id, name, subLabel, showSubtotal, items}]
+let ungroupedItems = [];   // v1 호환: 그룹 미지정 항목
+let activeGroupId  = null; // 항목 추가 대상 그룹
 
 // ===== 유틸 =====
 function fmt(n)   { return Number(n||0).toLocaleString('ko-KR'); }
@@ -805,74 +808,203 @@ function openQtyModal(cat, idx) {
 function addItemToQuote() {
   const name = document.getElementById('m-name').value.trim();
   if (!name) { alert('품명을 입력하세요.'); return; }
-  const unit = document.getElementById('m-unit').value.trim();
-  const qty = parseFloat(document.getElementById('m-qty').value) || 1;
+  const unit  = document.getElementById('m-unit').value.trim();
+  const qty   = parseFloat(document.getElementById('m-qty').value) || 1;
   const price = parseFloat(document.getElementById('m-price').value) || 0;
-  const note = document.getElementById('m-note').value.trim();
-  quoteItems.push({ name, unit, qty, price, note });
+  const note  = document.getElementById('m-note').value.trim();
+  const newItem = { name, unit, qty, price, note };
+  const grp = activeGroupId ? quoteGroups.find(g=>g.id===activeGroupId) : null;
+  if (grp) grp.items.push(newItem);
+  else ungroupedItems.push(newItem);
   closeModal('qty-modal');
   renderQuoteTable();
 }
 
 function renderQuoteTable() {
-  const tbody = document.getElementById('quote-tbody');
-  if (!quoteItems.length) {
-    tbody.innerHTML = `<tr><td colspan="9" class="empty-msg">좌측에서 항목을 선택해 추가하세요</td></tr>`;
-    updateTotals(); return;
+  const container = document.getElementById('groups-container');
+
+  if (!quoteGroups.length && !ungroupedItems.length) {
+    container.innerHTML = '<div class="empty-msg">+ 새 그룹 추가를 눌러 그룹을 만든 후<br>좌측에서 항목을 선택해 추가하세요</div>';
+    updateTotals(); updateActiveGroupHint(); return;
   }
-  tbody.innerHTML = quoteItems.map((item, i) => {
-    const sup = item.qty * item.price;
-    const tax = Math.round(sup * 0.1);
-    return `<tr${item.isExpense?' class="expense-row"':''}>
+
+  const tableHead = `<thead><tr>
+    <th class="td-no">No.</th>
+    <th style="min-width:140px">품명</th>
+    <th style="width:50px">단위</th>
+    <th style="width:60px">수량</th>
+    <th style="width:110px">공급단가</th>
+    <th style="width:110px">공급가액</th>
+    <th style="width:90px">세액</th>
+    <th style="min-width:80px">비고</th>
+    <th class="td-act">삭제</th>
+  </tr></thead>`;
+
+  const buildRows = (items, gid) => {
+    if (!items.length) return `<tr><td colspan="9" class="empty-msg" style="padding:12px">이 그룹을 선택 후 좌측에서 항목을 추가하세요</td></tr>`;
+    return items.map((item, i) => {
+      const sup = item.qty * item.price;
+      const tax = Math.round(sup * 0.1);
+      const key = gid + '_' + i;
+      return `<tr${item.isExpense?' class="expense-row"':''}>
       <td class="td-no">${i+1}</td>
-      <td><input class="editable" value="${esc(item.name)}" onchange="updateItem(${i},'name',this.value)" style="min-width:130px;width:100%"></td>
-      <td class="td-ctr"><input class="editable" value="${esc(item.unit)}" onchange="updateItem(${i},'unit',this.value)" style="width:44px;text-align:center"></td>
-      <td class="td-num"><input class="editable" type="number" value="${item.qty}" onchange="updateItem(${i},'qty',this.value)" style="width:52px;text-align:right"></td>
-      <td class="td-num"><input class="editable" type="number" value="${item.price}" onchange="updateItem(${i},'price',this.value)" style="width:100px;text-align:right"></td>
-      <td class="td-num" data-sup="${i}">${fmt(sup)}</td>
-      <td class="td-num" data-tax="${i}">${fmt(tax)}</td>
-      <td><input class="editable" value="${esc(item.note||'')}" onchange="updateItem(${i},'note',this.value)" style="min-width:80px;width:100%"></td>
-      <td class="td-act"><button class="btn btn-danger btn-sm" onclick="deleteItem(${i})">삭제</button></td>
+      <td><input class="editable" value="${esc(item.name)}" onchange="updateGroupItem('${gid}',${i},'name',this.value)" style="min-width:130px;width:100%"></td>
+      <td class="td-ctr"><input class="editable" value="${esc(item.unit||'')}" onchange="updateGroupItem('${gid}',${i},'unit',this.value)" style="width:44px;text-align:center"></td>
+      <td class="td-num"><input class="editable" type="number" value="${item.qty}" onchange="updateGroupItem('${gid}',${i},'qty',this.value)" style="width:52px;text-align:right"></td>
+      <td class="td-num"><input class="editable" type="number" value="${item.price}" onchange="updateGroupItem('${gid}',${i},'price',this.value)" style="width:100px;text-align:right"></td>
+      <td class="td-num" data-sup="${key}">${fmt(sup)}</td>
+      <td class="td-num" data-tax="${key}">${fmt(tax)}</td>
+      <td><input class="editable" value="${esc(item.note||'')}" onchange="updateGroupItem('${gid}',${i},'note',this.value)" style="min-width:80px;width:100%"></td>
+      <td class="td-act"><button class="btn btn-danger btn-sm" onclick="deleteGroupItem('${gid}',${i})">삭제</button></td>
     </tr>`;
+    }).join('');
+  };
+
+  let html = quoteGroups.map((grp, gi) => {
+    const isActive = grp.id === activeGroupId;
+    const sub    = grp.items.reduce((s,it) => s + it.qty*it.price, 0);
+    const subTax = Math.round(sub * 0.1);
+    return `<div class="group-card${isActive?' active':''}" data-group-id="${grp.id}">
+  <div class="group-card-header" onclick="setActiveGroup('${grp.id}')">
+    <input class="group-name-input" value="${esc(grp.name)}" onclick="event.stopPropagation()" onchange="updateGroup('${grp.id}','name',this.value)" placeholder="그룹 이름">
+    <input class="group-sublabel-input" value="${esc(grp.subLabel||'')}" onclick="event.stopPropagation()" onchange="updateGroup('${grp.id}','subLabel',this.value)" placeholder="서브라벨 (예: 12:35 방송)">
+    <label onclick="event.stopPropagation()" style="font-size:11px;color:#555;white-space:nowrap;cursor:pointer;display:flex;align-items:center;gap:3px">
+      <input type="checkbox"${grp.showSubtotal?' checked':''} onchange="updateGroup('${grp.id}','showSubtotal',this.checked)"> 소계표시
+    </label>
+    ${isActive?'<span class="active-group-badge">추가 대상</span>':''}
+    <div style="display:flex;gap:3px;margin-left:auto" onclick="event.stopPropagation()">
+      <button class="btn btn-secondary btn-sm" onclick="moveGroup('${grp.id}',-1)"${gi===0?' disabled':''} title="위로">▲</button>
+      <button class="btn btn-secondary btn-sm" onclick="moveGroup('${grp.id}',1)"${gi===quoteGroups.length-1?' disabled':''} title="아래로">▼</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteGroup('${grp.id}')">그룹 삭제</button>
+    </div>
+  </div>
+  <div style="overflow-x:auto">
+    <table class="group-qtable" style="min-width:700px">${tableHead}<tbody>${buildRows(grp.items, grp.id)}</tbody></table>
+  </div>
+  ${grp.showSubtotal?`<div class="group-subtotal-row" data-subtotal="${grp.id}">소계: 공급가액 ${fmt(sub)}원 &nbsp;/&nbsp; 세액 ${fmt(subTax)}원 &nbsp;/&nbsp; 합계 ${fmt(sub+subTax)}원</div>`:''}
+</div>`;
   }).join('');
+
+  if (ungroupedItems.length) {
+    html += `<div class="ungrouped-section">
+  <div class="ungrouped-header">기타 항목 (그룹 미지정)</div>
+  <div style="overflow-x:auto">
+    <table class="group-qtable" style="min-width:700px">${tableHead}<tbody>${buildRows(ungroupedItems,'__ungrouped__')}</tbody></table>
+  </div>
+</div>`;
+  }
+
+  container.innerHTML = html;
   updateTotals();
+  updateActiveGroupHint();
 }
 
-function updateItem(i, field, val) {
-  if (field === 'qty' || field === 'price') quoteItems[i][field] = parseFloat(val) || 0;
-  else quoteItems[i][field] = val;
-  if (field === 'qty' || field === 'price') {
-    const sup = quoteItems[i].qty * quoteItems[i].price;
+function updateActiveGroupHint() {
+  const el = document.getElementById('active-group-hint');
+  if (!el) return;
+  const grp = quoteGroups.find(g => g.id === activeGroupId);
+  el.textContent = grp ? `"${grp.name}" 선택됨 — 좌측에서 항목 추가` : '그룹 선택 후 좌측에서 항목 추가';
+}
+
+function updateGroupItem(gid, i, field, val) {
+  const items = gid === '__ungrouped__' ? ungroupedItems : (quoteGroups.find(g=>g.id===gid)||{items:[]}).items;
+  if (!items[i]) return;
+  items[i][field] = (field==='qty'||field==='price') ? (parseFloat(val)||0) : val;
+  if (field==='qty'||field==='price') {
+    const sup = items[i].qty * items[i].price;
     const tax = Math.round(sup * 0.1);
-    const supEl = document.querySelector(`[data-sup="${i}"]`);
-    const taxEl = document.querySelector(`[data-tax="${i}"]`);
+    const key = gid + '_' + i;
+    const supEl = document.querySelector(`[data-sup="${key}"]`);
+    const taxEl = document.querySelector(`[data-tax="${key}"]`);
     if (supEl) supEl.textContent = fmt(sup);
     if (taxEl) taxEl.textContent = fmt(tax);
+    if (gid !== '__ungrouped__') {
+      const grp = quoteGroups.find(g=>g.id===gid);
+      if (grp && grp.showSubtotal) {
+        const sub = grp.items.reduce((s,it)=>s+it.qty*it.price,0);
+        const subTax = Math.round(sub*0.1);
+        const stEl = document.querySelector(`[data-subtotal="${gid}"]`);
+        if (stEl) stEl.textContent = `소계: 공급가액 ${fmt(sub)}원 \xa0/\xa0 세액 ${fmt(subTax)}원 \xa0/\xa0 합계 ${fmt(sub+subTax)}원`;
+      }
+    }
   }
   updateTotals();
 }
 
-function deleteItem(i) {
-  quoteItems.splice(i, 1);
+function deleteGroupItem(gid, i) {
+  if (gid === '__ungrouped__') ungroupedItems.splice(i,1);
+  else { const grp=quoteGroups.find(g=>g.id===gid); if(grp) grp.items.splice(i,1); }
   renderQuoteTable();
 }
 
 function updateTotals() {
   let sup = 0, tax = 0;
-  quoteItems.forEach(it => { const s = it.qty * it.price; sup += s; tax += Math.round(s * 0.1); });
+  quoteGroups.forEach(grp => grp.items.forEach(it => { const s=it.qty*it.price; sup+=s; tax+=Math.round(s*0.1); }));
+  ungroupedItems.forEach(it => { const s=it.qty*it.price; sup+=s; tax+=Math.round(s*0.1); });
   document.getElementById('total-supply').textContent = fmt(sup);
-  document.getElementById('total-tax').textContent = fmt(tax);
-  document.getElementById('total-grand').textContent = fmt(sup + tax);
+  document.getElementById('total-tax').textContent    = fmt(tax);
+  document.getElementById('total-grand').textContent  = fmt(sup+tax);
 }
 
 function clearQuote() {
   if (!confirm('견적 내역을 초기화하시겠습니까?')) return;
-  quoteItems = []; editingQuoteId = null;
-  document.getElementById('inp-client').value = '';
+  quoteGroups=[]; ungroupedItems=[]; activeGroupId=null; editingQuoteId=null;
+  document.getElementById('inp-client').value  = '';
   document.getElementById('inp-project').value = '';
-  document.getElementById('inp-date').value = today();
-  document.getElementById('inp-note').value = DEFAULT_NOTE;
+  document.getElementById('inp-date').value    = today();
+  document.getElementById('inp-note').value    = DEFAULT_NOTE;
   renderQuoteTable();
+}
+
+// ===== 그룹 관리 (v2) =====
+function newGroupId() { return 'g' + Date.now() + Math.random().toString(36).slice(2,5); }
+
+function addGroup() {
+  const id = newGroupId();
+  quoteGroups.push({ id, name: '새 그룹', subLabel: '', showSubtotal: true, items: [] });
+  activeGroupId = id;
+  renderQuoteTable();
+  setTimeout(() => {
+    const el = document.querySelector(`[data-group-id="${id}"] .group-name-input`);
+    if (el) el.select();
+  }, 30);
+}
+
+function deleteGroup(id) {
+  const grp = quoteGroups.find(g=>g.id===id);
+  if (!confirm(`그룹 "${grp?.name||''}"을 삭제하시겠습니까?\n포함된 ${grp?.items?.length||0}개 항목도 함께 삭제됩니다.`)) return;
+  quoteGroups = quoteGroups.filter(g=>g.id!==id);
+  if (activeGroupId===id) activeGroupId = quoteGroups.length ? quoteGroups[0].id : null;
+  renderQuoteTable();
+}
+
+function moveGroup(id, dir) {
+  const idx = quoteGroups.findIndex(g=>g.id===id);
+  const newIdx = idx + dir;
+  if (idx<0||newIdx<0||newIdx>=quoteGroups.length) return;
+  [quoteGroups[idx],quoteGroups[newIdx]] = [quoteGroups[newIdx],quoteGroups[idx]];
+  renderQuoteTable();
+}
+
+function setActiveGroup(id) {
+  if (activeGroupId===id) return;
+  activeGroupId = id;
+  renderQuoteTable();
+}
+
+function updateGroup(id, field, val) {
+  const grp = quoteGroups.find(g=>g.id===id);
+  if (!grp) return;
+  grp[field] = val;
+  if (field==='showSubtotal') renderQuoteTable();
+}
+
+function getAllItems() {
+  // TODO: 2차 작업에서 그룹별 엑셀/PDF 출력 구현 예정. 현재는 전체 항목 순차 나열.
+  const result = [];
+  quoteGroups.forEach(g => result.push(...g.items));
+  result.push(...ungroupedItems);
+  return result;
 }
 
 function toggleExpenseForm() {
@@ -889,7 +1021,10 @@ function addExpenseItem() {
   const unit  = document.getElementById('e-unit').value.trim()       || '건';
   const price = parseFloat(document.getElementById('e-price').value) || 0;
   const note  = document.getElementById('e-note').value.trim();
-  quoteItems.push({ name, unit, qty, price, note, isExpense: true });
+  const newItem = { name, unit, qty, price, note, isExpense: true };
+  const grp = activeGroupId ? quoteGroups.find(g=>g.id===activeGroupId) : null;
+  if (grp) grp.items.push(newItem);
+  else ungroupedItems.push(newItem);
   document.getElementById('e-name').value  = '';
   document.getElementById('e-price').value = '';
   document.getElementById('e-qty').value   = 1;
@@ -900,15 +1035,19 @@ function addExpenseItem() {
 async function saveQuote() {
   const client = document.getElementById('inp-client').value.trim();
   if (!client) { alert('수신처를 입력하세요.'); return; }
-  if (!quoteItems.length) { alert('견적 항목이 없습니다.'); return; }
-  const sup = quoteItems.reduce((s,it)=>s+it.qty*it.price, 0);
-  const tax = quoteItems.reduce((s,it)=>s+Math.round(it.qty*it.price*0.1), 0);
+  const allItems = getAllItems();
+  if (!allItems.length) { alert('견적 항목이 없습니다.'); return; }
+  const sup = allItems.reduce((s,it)=>s+it.qty*it.price, 0);
+  const tax = allItems.reduce((s,it)=>s+Math.round(it.qty*it.price*0.1), 0);
   const entry = {
     id:      editingQuoteId || Date.now().toString(),
     client,  project: document.getElementById('inp-project').value.trim(),
     date:    document.getElementById('inp-date').value,
     note:    document.getElementById('inp-note').value,
-    items:   clone(quoteItems), supply: sup, tax, total: sup+tax,
+    version: 2,
+    groups:  clone(quoteGroups),
+    ungroupedItems: clone(ungroupedItems),
+    supply: sup, tax, total: sup+tax,
     savedAt: new Date().toISOString()
   };
   setSyncStatus('syncing');
@@ -938,6 +1077,8 @@ async function saveQuote() {
 
 // ===== 엑셀 다운로드 (PDF와 동일한 레이아웃) =====
 async function exportExcel() {
+  // TODO: 2차 작업에서 그룹별 엑셀 출력 구현 예정. 현재는 전체 항목 순차 나열.
+  const quoteItems = getAllItems();
   if (!quoteItems.length) { alert('견적 항목이 없습니다.'); return; }
   const client   = document.getElementById('inp-client').value  || '(미입력)';
   const project  = document.getElementById('inp-project').value || '';
@@ -1147,6 +1288,8 @@ async function exportExcel() {
 
 // ===== 인쇄 =====
 function printQuote() {
+  // TODO: 2차 작업에서 그룹별 PDF 출력 구현 예정. 현재는 전체 항목 순차 나열.
+  const quoteItems = getAllItems();
   const client = document.getElementById('inp-client').value || '(미입력)';
   const project = document.getElementById('inp-project').value || '';
   const date = document.getElementById('inp-date').value;
@@ -1398,7 +1541,15 @@ function loadQuote(id) {
   document.getElementById('inp-project').value = entry.project||'';
   document.getElementById('inp-date').value    = entry.date;
   document.getElementById('inp-note').value    = entry.note || DEFAULT_NOTE;
-  quoteItems = clone(entry.items);
+  if (entry.version === 2) {
+    quoteGroups    = clone(entry.groups || []);
+    ungroupedItems = clone(entry.ungroupedItems || []);
+  } else {
+    // v1 형식: 전체 항목을 "미분류" 그룹으로 자동 변환
+    quoteGroups    = [{ id: newGroupId(), name: '미분류', subLabel: '', showSubtotal: false, items: clone(entry.items || []) }];
+    ungroupedItems = [];
+  }
+  activeGroupId  = quoteGroups.length ? quoteGroups[0].id : null;
   editingQuoteId = entry.id;
   renderQuoteTable();
   goToQuoteTab();
