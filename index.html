@@ -259,6 +259,8 @@ tr.expense-row:hover td{background:#fff5d6}
 .is-split-slot:hover .is-del-btn{display:flex}
 /* 활성 셀 */
 .is-cell-active{outline:2px solid #1a6fc4 !important;outline-offset:-2px;z-index:2}
+/* 분할 슬롯 활성: overflow:hidden으로 outline 클리핑되므로 inset box-shadow 사용 */
+.is-split-slot.is-cell-active{box-shadow:inset 0 0 0 2px #1a6fc4 !important;outline:none !important}
 /* 빈 셀: 분할 버튼 항상 표시 (hover 버그 방어) */
 .is-empty-cell .is-split-btns{display:flex;opacity:0.55}
 .is-empty-cell:hover .is-split-btns{opacity:1}
@@ -1149,7 +1151,10 @@ function deleteImgSheetPage(p) {
 function setActiveCell(p, ci, split) {
   clearActiveCell();
   activeCell = { pageIndex: p, cellIndex: ci, split: split ?? null };
-  const el = document.querySelector(`[data-cell-key="${p}-${ci}"]`);
+  const key = split ? `${p}-${ci}-${split}` : null;
+  const el = key
+    ? document.querySelector(`[data-slot-key="${key}"]`)
+    : document.querySelector(`[data-cell-key="${p}-${ci}"]`);
   if (el) el.classList.add('is-cell-active');
 }
 function clearActiveCell() {
@@ -1170,6 +1175,22 @@ function emptyCellClick(e, p, ci) {
 function imgCellClick(e, p, ci) {
   if (e.target.classList.contains('is-del-btn') || e.target.classList.contains('is-caption-input')) return;
   setActiveCell(p, ci, null);
+}
+
+// 분할 슬롯 — 빈 슬롯 클릭: 첫 클릭 → 활성화, 이미 활성화 → 파일 선택 열기
+function emptySplitSlotClick(e, p, ci, splitPos) {
+  if (e.target.classList.contains('is-del-btn')) return;
+  if (activeCell?.pageIndex === p && activeCell?.cellIndex === ci && activeCell?.split === splitPos) {
+    openSplitCellPicker(p, ci, splitPos);
+    clearActiveCell();
+  } else {
+    setActiveCell(p, ci, splitPos);
+  }
+}
+// 분할 슬롯 — 이미지 있는 슬롯 클릭 → 활성화 (Ctrl+V로 교체 가능)
+function imgSplitSlotClick(e, p, ci, splitPos) {
+  if (e.target.classList.contains('is-del-btn') || e.target.classList.contains('is-caption-input')) return;
+  setActiveCell(p, ci, splitPos);
 }
 
 // 빈 셀 클릭 시 해당 위치로 업로드 (hidden file input 재사용)
@@ -1346,17 +1367,21 @@ function renderSplitCellHtml(p, ci, splitType) {
   const img2 = imageSheet.images.find(im => im.pageIndex===p && im.cellIndex===ci && im.split===part2);
   const capPos = imageSheet.captionPosition;
   function slotHtml(img, splitPos) {
+    const slotKey = `${p}-${ci}-${splitPos}`;
     if (!img) {
-      return `<div class="is-split-slot is-empty-slot" onclick="openSplitCellPicker(${p},${ci},'${splitPos}')"
+      return `<div class="is-split-slot is-empty-slot" data-slot-key="${slotKey}"
+        onclick="emptySplitSlotClick(event,${p},${ci},'${splitPos}')"
         ondragover="imgDragOver(event)" ondrop="imgDropSplit(event,${p},${ci},'${splitPos}')">
-        <div style="font-size:22px;color:#b0c8e8;font-weight:300;pointer-events:none">+</div></div>`;
+        <div style="font-size:22px;color:#b0c8e8;font-weight:300;pointer-events:none">+</div>
+        <div style="font-size:9px;color:#b0c8e8;pointer-events:none;margin-top:2px">클릭 또는 Ctrl+V</div></div>`;
     } else if (img.uploading) {
-      return `<div class="is-split-slot"><div class="is-uploading" style="height:100%"><span>업로드 중...</span></div></div>`;
+      return `<div class="is-split-slot" data-slot-key="${slotKey}"><div class="is-uploading" style="height:100%"><span>업로드 중...</span></div></div>`;
     } else if (img.error) {
-      return `<div class="is-split-slot"><div class="is-error" style="height:100%">${img.error}<br><button onclick="deleteImgFile('${img.id}')" class="btn btn-danger btn-sm">삭제</button></div></div>`;
+      return `<div class="is-split-slot" data-slot-key="${slotKey}"><div class="is-error" style="height:100%">${img.error}<br><button onclick="deleteImgFile('${img.id}')" class="btn btn-danger btn-sm">삭제</button></div></div>`;
     } else {
       const cap = img.caption ? `<div class="is-split-cap">${esc(img.caption)}</div>` : '';
-      return `<div class="is-split-slot" draggable="true"
+      return `<div class="is-split-slot" data-slot-key="${slotKey}" draggable="true"
+        onclick="imgSplitSlotClick(event,${p},${ci},'${splitPos}')"
         ondragstart="imgDragStartSplit(event,${p},${ci},'${splitPos}')" ondragover="imgDragOver(event)"
         ondrop="imgDropSplit(event,${p},${ci},'${splitPos}')" ondragend="imgDragEnd()">
         ${capPos==='top' ? cap : ''}
@@ -1435,7 +1460,10 @@ function renderImgSheetPages() {
   container.innerHTML = html;
   // 렌더 후 활성 셀 강조 복원
   if (activeCell) {
-    const el = container.querySelector(`[data-cell-key="${activeCell.pageIndex}-${activeCell.cellIndex}"]`);
+    const { pageIndex: ap, cellIndex: ac, split: asp } = activeCell;
+    const el = asp
+      ? container.querySelector(`[data-slot-key="${ap}-${ac}-${asp}"]`)
+      : container.querySelector(`[data-cell-key="${ap}-${ac}"]`);
     if (el) el.classList.add('is-cell-active');
   }
 }
