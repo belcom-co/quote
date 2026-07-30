@@ -1077,15 +1077,14 @@ async function saveQuote() {
 
 // ===== 엑셀 다운로드 (PDF와 동일한 레이아웃) =====
 async function exportExcel() {
-  // TODO: 2차 작업에서 그룹별 엑셀 출력 구현 예정. 현재는 전체 항목 순차 나열.
-  const quoteItems = getAllItems();
-  if (!quoteItems.length) { alert('견적 항목이 없습니다.'); return; }
+  const allItems = getAllItems();
+  if (!allItems.length) { alert('견적 항목이 없습니다.'); return; }
   const client   = document.getElementById('inp-client').value  || '(미입력)';
   const project  = document.getElementById('inp-project').value || '';
   const date     = document.getElementById('inp-date').value;
   const noteText = document.getElementById('inp-note').value;
-  const sup = quoteItems.reduce((s,it)=>s+it.qty*it.price,0);
-  const tax = quoteItems.reduce((s,it)=>s+Math.round(it.qty*it.price*0.1),0);
+  const sup = allItems.reduce((s,it)=>s+it.qty*it.price,0);
+  const tax = allItems.reduce((s,it)=>s+Math.round(it.qty*it.price*0.1),0);
   const total = sup + tax;
 
   const wb = new ExcelJS.Workbook();
@@ -1222,11 +1221,11 @@ async function exportExcel() {
   });
   R++;
 
-  // ━━━ 8. 항목 rows ━━━
+  // ━━━ 8. 항목 rows (그룹 구조 반영) ━━━
   const thinBorder = allBorder('thin','FFCCCCCC');
-  quoteItems.forEach((it,i) => {
+  const writeItemRow = (it, no) => {
     const s = it.qty*it.price, t = Math.round(s*0.1);
-    const vals = [i+1, it.name, `${it.qty} ${it.unit}`, it.price, s, t, it.note||''];
+    const vals = [no, it.name, `${it.qty} ${it.unit}`, it.price, s, t, it.note||''];
     ws.getRow(R).height = 18;
     COLS.forEach((col,ci) => {
       const c = cell(`${col}${R}`);
@@ -1238,7 +1237,61 @@ async function exportExcel() {
       if (ci>=3 && ci<=5) c.numFmt = '#,##0';
     });
     R++;
-  });
+    return { s, t };
+  };
+
+  if (quoteGroups.length > 0) {
+    // v2: 그룹별 렌더링
+    quoteGroups.forEach(grp => {
+      // 그룹 헤더 행
+      ws.getRow(R).height = 22;
+      merge(`A${R}:G${R}`);
+      const ghc = cell(`A${R}`);
+      ghc.value     = grp.subLabel ? `${grp.name} (${grp.subLabel})` : grp.name;
+      ghc.font      = font('맑은 고딕', 10, true, 'FF1A3A5C');
+      ghc.alignment = align('left');
+      ghc.fill      = fill('FFE8EEF5');
+      ghc.border    = allBorder('thin','FFB8C8D8');
+      R++;
+
+      let gSup = 0, gTax = 0;
+      grp.items.forEach((it, i) => {
+        const {s,t} = writeItemRow(it, i+1);
+        gSup += s; gTax += t;
+      });
+
+      // 소계 행 (항상 표시)
+      ws.getRow(R).height = 18;
+      [null,'소  계',null,null,gSup,gTax,null].forEach((v,ci) => {
+        const c = cell(`${COLS[ci]}${R}`);
+        c.value     = v;
+        c.font      = font('맑은 고딕', 9, true);
+        c.alignment = align(ci<=3?'center':ALGN[ci]);
+        c.fill      = fill('FFF5F5F5');
+        c.border    = thinBorder;
+        if (ci>=4&&ci<=5) c.numFmt = '#,##0';
+      });
+      merge(`A${R}:D${R}`);
+      R++;
+    });
+
+    // 기타 항목 (ungroupedItems)
+    if (ungroupedItems.length) {
+      ws.getRow(R).height = 22;
+      merge(`A${R}:G${R}`);
+      const uhc = cell(`A${R}`);
+      uhc.value     = '기타 항목';
+      uhc.font      = font('맑은 고딕', 10, true, 'FF666666');
+      uhc.alignment = align('left');
+      uhc.fill      = fill('FFF5F5F5');
+      uhc.border    = allBorder('thin','FFCCCCCC');
+      R++;
+      ungroupedItems.forEach((it, i) => writeItemRow(it, i+1));
+    }
+  } else {
+    // v1: 기존 방식 (순차 나열)
+    allItems.forEach((it, i) => writeItemRow(it, i+1));
+  }
 
   // ━━━ 9. 합계 row ━━━
   ws.getRow(R).height = 22;
@@ -1248,7 +1301,7 @@ async function exportExcel() {
     c.value     = v;
     c.font      = font('맑은 고딕', 10, true);
     c.alignment = align(ci<=3?'center':ALGN[ci]);
-    c.fill      = fill('FFF0F2F5');
+    c.fill      = fill('FFE8EDF5');
     c.border    = sumBdr;
     if (ci>=4 && ci<=5) c.numFmt = '#,##0';
   });
@@ -1288,23 +1341,24 @@ async function exportExcel() {
 
 // ===== 인쇄 =====
 function printQuote() {
-  // TODO: 2차 작업에서 그룹별 PDF 출력 구현 예정. 현재는 전체 항목 순차 나열.
-  const quoteItems = getAllItems();
+  const allItems = getAllItems();
+  if (!allItems.length) { alert('견적 항목이 없습니다.'); return; }
   const client = document.getElementById('inp-client').value || '(미입력)';
   const project = document.getElementById('inp-project').value || '';
   const date = document.getElementById('inp-date').value;
-  const sup = quoteItems.reduce((s,it)=>s+it.qty*it.price,0);
-  const tax = quoteItems.reduce((s,it)=>s+Math.round(it.qty*it.price*0.1),0);
+  const sup = allItems.reduce((s,it)=>s+it.qty*it.price,0);
+  const tax = allItems.reduce((s,it)=>s+Math.round(it.qty*it.price*0.1),0);
   const noteText = document.getElementById('inp-note').value;
   const noteLines = noteText.split('\n').filter(l=>l.trim()).map(l=>`<div>${l}</div>`).join('');
   const S = (s) => `style="${s}"`;
   const B = 'border:1px solid #aaa;';
   const P = 'padding:5px 8px;';
-  const rows = quoteItems.map((it,i)=>{
-    const s=it.qty*it.price; const t=Math.round(s*0.1);
+
+  const makeItemRow = (it, no) => {
+    const s=it.qty*it.price, t=Math.round(s*0.1);
     const bg = it.isExpense ? 'background:#fffbee;' : '';
     return `<tr>
-      <td ${S(B+P+'text-align:center;'+bg)}>${i+1}</td>
+      <td ${S(B+P+'text-align:center;'+bg)}>${no}</td>
       <td ${S(B+P+bg)}>${it.name}${it.isExpense?' <span style="font-size:9pt;color:#b8860b">(실비)</span>':''}</td>
       <td ${S(B+P+'text-align:center;'+bg)}>${it.qty} ${it.unit}</td>
       <td ${S(B+P+'text-align:right;'+bg)}>${fmt(it.price)}</td>
@@ -1312,7 +1366,36 @@ function printQuote() {
       <td ${S(B+P+'text-align:right;'+bg)}>${fmt(t)}</td>
       <td ${S(B+P+bg)}>${it.note||''}</td>
     </tr>`;
-  }).join('');
+  };
+
+  let rows = '';
+  if (quoteGroups.length > 0) {
+    // v2: 그룹별 렌더링
+    quoteGroups.forEach(grp => {
+      const hdrTxt = grp.subLabel ? `${grp.name} (${grp.subLabel})` : grp.name;
+      rows += `<tr><td colspan="7" ${S('border:1px solid #aaa;padding:6px 10px;background:#e8eef5;font-weight:700;color:#1a3a5c;')}>${hdrTxt}</td></tr>`;
+      let gSup = 0, gTax = 0;
+      grp.items.forEach((it, i) => {
+        gSup += it.qty*it.price;
+        gTax += Math.round(it.qty*it.price*0.1);
+        rows += makeItemRow(it, i+1);
+      });
+      rows += `<tr style="background:#f5f5f5;font-weight:700">
+        <td ${S(B+P+'text-align:center')} colspan="4">소  계</td>
+        <td ${S(B+P+'text-align:right')}>${fmt(gSup)}</td>
+        <td ${S(B+P+'text-align:right')}>${fmt(gTax)}</td>
+        <td ${S(B+P)}></td>
+      </tr>`;
+    });
+    if (ungroupedItems.length) {
+      rows += `<tr><td colspan="7" ${S('border:1px solid #aaa;padding:6px 10px;background:#f5f5f5;font-weight:700;color:#666;')}>기타 항목</td></tr>`;
+      ungroupedItems.forEach((it, i) => { rows += makeItemRow(it, i+1); });
+    }
+  } else {
+    // v1: 기존 방식 (순차 나열)
+    allItems.forEach((it, i) => { rows += makeItemRow(it, i+1); });
+  }
+
   const logoSrc = logoBase64
     ? `data:image/jpeg;base64,${logoBase64}`
     : '벨콤비즈니스 로고.jpg';
