@@ -238,6 +238,23 @@ tr.expense-row:hover td{background:#fff5d6}
 .is-uploading,.is-error{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;font-size:11px;color:#888;text-align:center;padding:6px;gap:4px}
 .is-error{color:#dc3545}
 .is-empty-msg{text-align:center;padding:36px 16px;color:#bbb;font-size:13px}
+/* ===== 셀 분할 ===== */
+.is-split-btns{position:absolute;top:4px;right:4px;display:none;flex-direction:column;gap:2px;z-index:5}
+.is-cell:hover .is-split-btns{display:flex}
+.is-split-btn{padding:1px 5px;font-size:9px;background:rgba(255,255,255,.9);border:1px solid #b0c8e8;border-radius:3px;cursor:pointer;color:#1a3a5c;line-height:1.5;white-space:nowrap}
+.is-split-btn:hover{background:#d8e8fb}
+.is-merge-btn{position:absolute;top:4px;right:4px;display:none;padding:2px 6px;font-size:9px;background:#fff3cd;border:1px solid #ffc107;border-radius:3px;cursor:pointer;color:#856404;z-index:5;white-space:nowrap;line-height:1.4}
+.is-cell-split:hover .is-merge-btn{display:block}
+.is-cell-split{overflow:hidden}
+.is-split-slot{flex:1;position:relative;overflow:hidden;display:flex;flex-direction:column;min-height:0;cursor:grab}
+.is-empty-slot{background:#f7f9fc;border:2px dashed #c8d8ec;cursor:pointer;display:flex;align-items:center;justify-content:center;min-height:0}
+.is-empty-slot:hover{background:#e8f0fb}
+.is-split-img-wrap{flex:1;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;background:#fff;min-height:0}
+.is-split-img-wrap img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+.is-split-cap{font-size:9px;color:#555;padding:1px 3px;text-align:center;background:#f5f5f5;flex-shrink:0;border-top:1px solid #e4e4e4}
+.is-split-div-h{height:2px;background:#c0cedf;flex-shrink:0}
+.is-split-div-v{width:2px;background:#c0cedf;flex-shrink:0}
+.is-split-slot:hover .is-del-btn{display:flex}
 @media print{
   .imgsheet-print-page{page-break-before:always;width:100%;font-family:'맑은 고딕','Malgun Gothic',sans-serif}
   .imgsheet-print-grid{display:grid;width:100%;height:100vh;box-sizing:border-box;padding:12px;gap:8px}
@@ -368,7 +385,7 @@ tr.expense-row:hover td{background:#fff5d6}
     </div>
     <!-- 특정 셀 위치 업로드용 숨김 파일 인풋 -->
     <input type="file" id="is-cell-picker" accept="image/*" style="display:none"
-      onchange="handleImgSheetFiles(this.files,this._targetPage,this._targetCell);this.value=''">
+      onchange="handleImgSheetFiles(this.files,this._targetPage,this._targetCell,this._targetSplit);this.value=''">
   </div>
 </div>
 
@@ -680,7 +697,7 @@ let quoteGroups    = [];   // v2: [{id, name, subLabel, showSubtotal, items}]
 let ungroupedItems = [];   // v1 호환: 그룹 미지정 항목
 let activeGroupId  = null; // 항목 추가 대상 그룹
 // v3: 이미지 시트
-let imageSheet = { layout: '2x2', captionPosition: 'bottom', pageCount: 1, images: [] };
+let imageSheet = { layout: '2x2', captionPosition: 'bottom', pageCount: 1, images: [], cellSplits: {} };
 const IS_LAYOUTS = {
   '1x1':{cols:1,rows:1},'1x2':{cols:1,rows:2},'2x1':{cols:2,rows:1},
   '2x2':{cols:2,rows:2},'2x3':{cols:2,rows:3},'3x2':{cols:3,rows:2},'3x3':{cols:3,rows:3}
@@ -1044,14 +1061,20 @@ function migrateImgSheet(sheet) {
       im.pageIndex = Math.floor(idx / perPage);
       im.cellIndex = idx % perPage;
     }
+    if (im.split === undefined) im.split = null;
   });
+  if (!sheet.cellSplits) sheet.cellSplits = {};
   const maxPage = sheet.images.reduce((mx, im) => Math.max(mx, im.pageIndex || 0), 0);
   sheet.pageCount = Math.max(sheet.pageCount || 1, maxPage + 1);
   return sheet;
 }
 
 function getImgAtCell(pageIndex, cellIndex) {
-  return imageSheet.images.find(im => im.pageIndex === pageIndex && im.cellIndex === cellIndex);
+  return imageSheet.images.find(im => im.pageIndex === pageIndex && im.cellIndex === cellIndex && !im.split);
+}
+
+function getImgAtSubCell(pageIndex, cellIndex, splitPos) {
+  return imageSheet.images.find(im => im.pageIndex === pageIndex && im.cellIndex === cellIndex && im.split === splitPos);
 }
 
 function findNextFreeCell() {
@@ -1059,7 +1082,8 @@ function findNextFreeCell() {
   const perPage = cols * rows;
   for (let p = 0; p < imageSheet.pageCount; p++) {
     for (let ci = 0; ci < perPage; ci++) {
-      if (!getImgAtCell(p, ci)) return { pageIndex: p, cellIndex: ci };
+      const key = `${p}-${ci}`;
+      if (!getImgAtCell(p, ci) && !(imageSheet.cellSplits || {})[key]) return { pageIndex: p, cellIndex: ci };
     }
   }
   return null;
@@ -1100,6 +1124,13 @@ function deleteImgSheetPage(p) {
   });
   imageSheet.images = imageSheet.images.filter(im => im.pageIndex !== p);
   imageSheet.images.forEach(im => { if (im.pageIndex > p) im.pageIndex--; });
+  const newSplits = {};
+  Object.entries(imageSheet.cellSplits || {}).forEach(([key, val]) => {
+    const [pg, ci] = key.split('-').map(Number);
+    if (pg === p) return;
+    newSplits[pg > p ? `${pg-1}-${ci}` : key] = val;
+  });
+  imageSheet.cellSplits = newSplits;
   imageSheet.pageCount = Math.max(1, (imageSheet.pageCount || 1) - 1);
   renderImgSheetPages();
 }
@@ -1110,36 +1141,79 @@ function openCellPicker(pageIndex, cellIndex) {
   if (!inp) return;
   inp._targetPage = pageIndex;
   inp._targetCell = cellIndex;
+  inp._targetSplit = null;
   inp.click();
 }
 
-async function handleImgSheetFiles(files, targetPageIndex, targetCellIndex) {
+function openSplitCellPicker(p, ci, splitPos) {
+  const inp = document.getElementById('is-cell-picker');
+  if (!inp) return;
+  inp._targetPage = p;
+  inp._targetCell = ci;
+  inp._targetSplit = splitPos;
+  inp.click();
+}
+
+function splitCell(p, ci, type) {
+  if (!imageSheet.cellSplits) imageSheet.cellSplits = {};
+  const key = `${p}-${ci}`;
+  if (imageSheet.cellSplits[key]) return;
+  const existingImg = getImgAtCell(p, ci);
+  if (existingImg) existingImg.split = type === 'horizontal' ? 'top' : 'left';
+  imageSheet.cellSplits[key] = type;
+  renderImgSheetPages();
+}
+
+function mergeCell(p, ci) {
+  if (!imageSheet.cellSplits) return;
+  const key = `${p}-${ci}`;
+  const splitType = imageSheet.cellSplits[key];
+  if (!splitType) return;
+  const part1 = splitType === 'horizontal' ? 'top' : 'left';
+  const part2 = splitType === 'horizontal' ? 'bottom' : 'right';
+  const label1 = splitType === 'horizontal' ? '상단' : '좌측';
+  const label2 = splitType === 'horizontal' ? '하단' : '우측';
+  const img1 = getImgAtSubCell(p, ci, part1);
+  const img2 = getImgAtSubCell(p, ci, part2);
+  if (img1 && img2) {
+    const keepFirst = confirm(`이미지 2개가 있습니다.\n확인: ${label1} 유지 (${label2} 삭제)\n취소: ${label2} 유지 (${label1} 삭제)`);
+    const toDelete = keepFirst ? img2 : img1;
+    const toKeep   = keepFirst ? img1 : img2;
+    deleteImgFile(toDelete.id);
+    toKeep.split = null;
+  } else if (img1) { img1.split = null; }
+    else if (img2) { img2.split = null; }
+  delete imageSheet.cellSplits[key];
+  renderImgSheetPages();
+}
+
+async function handleImgSheetFiles(files, targetPageIndex, targetCellIndex, targetSplitPos) {
   if (!files || !files.length) return;
   const validFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
   if (!validFiles.length) return;
   if (!editingQuoteId) editingQuoteId = Date.now().toString();
   const sec = document.getElementById('imgsheet-section');
   if (!sec.classList.contains('open')) toggleImgSheet();
-  let tPage = targetPageIndex, tCell = targetCellIndex;
+  let tPage = targetPageIndex, tCell = targetCellIndex, tSplit = targetSplitPos ?? null;
   for (const file of validFiles) {
     if (imageSheet.images.filter(im => !im.error).length >= 50) { alert('이미지는 최대 50장까지 추가할 수 있습니다.'); break; }
     if (file.size > 20 * 1024 * 1024) { alert(`"${file.name}"이 20MB를 초과합니다. 건너뜁니다.`); continue; }
     if (tPage !== undefined && tCell !== undefined) {
-      await uploadImgFile(file, tPage, tCell);
-      tPage = undefined; tCell = undefined;
+      await uploadImgFile(file, tPage, tCell, tSplit);
+      tPage = undefined; tCell = undefined; tSplit = null;
     } else {
       // 자동으로 다음 빈 셀 탐색 (없으면 새 페이지 자동 추가)
       let free = findNextFreeCell();
       if (!free) { imageSheet.pageCount = (imageSheet.pageCount||1)+1; free = findNextFreeCell(); }
-      if (free) await uploadImgFile(file, free.pageIndex, free.cellIndex);
+      if (free) await uploadImgFile(file, free.pageIndex, free.cellIndex, null);
     }
   }
 }
 
-async function uploadImgFile(file, pageIndex, cellIndex) {
+async function uploadImgFile(file, pageIndex, cellIndex, split = null) {
   if (!window.fbStorage || !window.fbStorageFS) { alert('Firebase Storage가 초기화되지 않았습니다.'); return; }
   const id = imgNewId();
-  imageSheet.images.push({ id, url: '', caption: '', storagePath: '', pageIndex, cellIndex, uploading: true });
+  imageSheet.images.push({ id, url: '', caption: '', storagePath: '', pageIndex, cellIndex, split: split||null, uploading: true });
   renderImgSheetPages();
   try {
     const { ref: sRef, uploadBytesResumable, getDownloadURL } = window.fbStorageFS;
@@ -1151,7 +1225,7 @@ async function uploadImgFile(file, pageIndex, cellIndex) {
     });
     const url = await getDownloadURL(fileRef);
     const idx = imageSheet.images.findIndex(im => im.id === id);
-    if (idx >= 0) imageSheet.images[idx] = { id, url, caption: '', storagePath: path, pageIndex, cellIndex, uploading: false };
+    if (idx >= 0) imageSheet.images[idx] = { id, url, caption: '', storagePath: path, pageIndex, cellIndex, split: split||null, uploading: false };
   } catch(e) {
     console.error('이미지 업로드 오류:', e);
     const idx = imageSheet.images.findIndex(im => im.id === id);
@@ -1205,10 +1279,68 @@ function imgDragEnd() {
   document.querySelectorAll('.is-cell').forEach(c => c.classList.remove('drag-over'));
 }
 
+function imgDragStartSplit(e, p, ci, splitPos) {
+  isDragSrc = { pageIndex: p, cellIndex: ci, split: splitPos };
+  e.dataTransfer.effectAllowed = 'move';
+  e.stopPropagation();
+}
+function imgDropSplit(e, p, ci, splitPos) {
+  e.preventDefault(); e.stopPropagation();
+  if (!isDragSrc) return;
+  const src = isDragSrc; isDragSrc = null;
+  if (src.pageIndex === p && src.cellIndex === ci && src.split === splitPos) { renderImgSheetPages(); return; }
+  const srcImg = src.split ? getImgAtSubCell(src.pageIndex, src.cellIndex, src.split) : getImgAtCell(src.pageIndex, src.cellIndex);
+  const dstImg = getImgAtSubCell(p, ci, splitPos);
+  if (srcImg) {
+    const oldSplit = srcImg.split;
+    srcImg.pageIndex = p; srcImg.cellIndex = ci; srcImg.split = splitPos;
+    if (dstImg) { dstImg.pageIndex = src.pageIndex; dstImg.cellIndex = src.cellIndex; dstImg.split = oldSplit; }
+  }
+  renderImgSheetPages();
+}
+
+function renderSplitCellHtml(p, ci, splitType) {
+  const isH = splitType === 'horizontal';
+  const part1 = isH ? 'top' : 'left';
+  const part2 = isH ? 'bottom' : 'right';
+  const label1 = isH ? '상하' : '좌우';
+  const img1 = imageSheet.images.find(im => im.pageIndex===p && im.cellIndex===ci && im.split===part1);
+  const img2 = imageSheet.images.find(im => im.pageIndex===p && im.cellIndex===ci && im.split===part2);
+  const capPos = imageSheet.captionPosition;
+  function slotHtml(img, splitPos) {
+    if (!img) {
+      return `<div class="is-split-slot is-empty-slot" onclick="openSplitCellPicker(${p},${ci},'${splitPos}')"
+        ondragover="imgDragOver(event)" ondrop="imgDropSplit(event,${p},${ci},'${splitPos}')">
+        <div style="font-size:22px;color:#b0c8e8;font-weight:300;pointer-events:none">+</div></div>`;
+    } else if (img.uploading) {
+      return `<div class="is-split-slot"><div class="is-uploading" style="height:100%"><span>업로드 중...</span></div></div>`;
+    } else if (img.error) {
+      return `<div class="is-split-slot"><div class="is-error" style="height:100%">${img.error}<br><button onclick="deleteImgFile('${img.id}')" class="btn btn-danger btn-sm">삭제</button></div></div>`;
+    } else {
+      const cap = img.caption ? `<div class="is-split-cap">${esc(img.caption)}</div>` : '';
+      return `<div class="is-split-slot" draggable="true"
+        ondragstart="imgDragStartSplit(event,${p},${ci},'${splitPos}')" ondragover="imgDragOver(event)"
+        ondrop="imgDropSplit(event,${p},${ci},'${splitPos}')" ondragend="imgDragEnd()">
+        ${capPos==='top' ? cap : ''}
+        <div class="is-split-img-wrap"><img src="${img.url}" alt="${esc(img.caption||'')}">
+          <button class="is-del-btn" onclick="deleteImgFile('${img.id}')">✕</button></div>
+        ${capPos==='bottom' ? cap : ''}</div>`;
+    }
+  }
+  const dir = isH ? 'column' : 'row';
+  const divCls = isH ? 'is-split-div-h' : 'is-split-div-v';
+  return `<div class="is-cell is-cell-split" style="display:flex;flex-direction:${dir};position:relative;overflow:hidden">
+    ${slotHtml(img1, part1)}
+    <div class="${divCls}"></div>
+    ${slotHtml(img2, part2)}
+    <button class="is-merge-btn" onclick="mergeCell(${p},${ci})">${label1} 합치기</button>
+  </div>`;
+}
+
 function renderImgSheetPages() {
   const container = document.getElementById('imgsheet-pages');
   if (!container) return;
-  migrateImgSheet(imageSheet); // 구 형식 자동 마이그레이션
+  migrateImgSheet(imageSheet);
   const countEl = document.getElementById('is-count');
   const validCnt = imageSheet.images.filter(i => !i.uploading && !i.error && i.url).length;
   if (countEl) countEl.textContent = `${validCnt} / 50장`;
@@ -1219,29 +1351,37 @@ function renderImgSheetPages() {
   for (let p = 0; p < pageCount; p++) {
     let cells = '';
     for (let ci = 0; ci < perPage; ci++) {
-      const img = getImgAtCell(p, ci);
-      if (!img) {
-        // 빈 셀: 클릭하면 해당 위치에 이미지 추가
-        cells += `<div class="is-cell is-empty-cell" onclick="openCellPicker(${p},${ci})"
-          ondragover="imgDragOver(event)" ondrop="imgDrop(event,${p},${ci})">
-          <div class="is-add-hint">+</div></div>`;
-      } else if (img.uploading) {
-        cells += `<div class="is-cell"><div class="is-uploading"><span>업로드 중...</span></div></div>`;
-      } else if (img.error) {
-        cells += `<div class="is-cell"><div class="is-error">${img.error}<br><button onclick="deleteImgFile('${img.id}')" class="btn btn-danger btn-sm" style="margin-top:4px">삭제</button></div></div>`;
+      const key = `${p}-${ci}`;
+      const splitType = (imageSheet.cellSplits || {})[key];
+      if (splitType) {
+        cells += renderSplitCellHtml(p, ci, splitType);
       } else {
-        const capHtml = `<div class="is-caption ${imageSheet.captionPosition==='top'?'is-caption-top':'is-caption-bot'}"><input type="text" class="is-caption-input" value="${esc(img.caption||'')}" placeholder="캡션 입력" onchange="updateImgCaption('${img.id}',this.value)"></div>`;
-        cells += `<div class="is-cell" draggable="true"
-          ondragstart="imgDragStart(event,${p},${ci})" ondragover="imgDragOver(event)"
-          ondrop="imgDrop(event,${p},${ci})" ondragend="imgDragEnd()">
-          ${imageSheet.captionPosition==='top' ? capHtml : ''}
-          <div class="is-img-wrap"><img src="${img.url}" alt="${esc(img.caption||'')}">
-            <button class="is-del-btn" onclick="deleteImgFile('${img.id}')">✕</button></div>
-          ${imageSheet.captionPosition==='bottom' ? capHtml : ''}
+        const img = getImgAtCell(p, ci);
+        const splitBtns = `<div class="is-split-btns">
+          <button class="is-split-btn" onclick="event.stopPropagation();splitCell(${p},${ci},'horizontal')" title="상/하 분할">⊟ 상하</button>
+          <button class="is-split-btn" onclick="event.stopPropagation();splitCell(${p},${ci},'vertical')" title="좌/우 분할">⊞ 좌우</button>
         </div>`;
+        if (!img) {
+          cells += `<div class="is-cell is-empty-cell" onclick="openCellPicker(${p},${ci})"
+            ondragover="imgDragOver(event)" ondrop="imgDrop(event,${p},${ci})">
+            <div class="is-add-hint">+</div>${splitBtns}</div>`;
+        } else if (img.uploading) {
+          cells += `<div class="is-cell"><div class="is-uploading"><span>업로드 중...</span></div>${splitBtns}</div>`;
+        } else if (img.error) {
+          cells += `<div class="is-cell"><div class="is-error">${img.error}<br><button onclick="deleteImgFile('${img.id}')" class="btn btn-danger btn-sm" style="margin-top:4px">삭제</button></div>${splitBtns}</div>`;
+        } else {
+          const capHtml = `<div class="is-caption ${imageSheet.captionPosition==='top'?'is-caption-top':'is-caption-bot'}"><input type="text" class="is-caption-input" value="${esc(img.caption||'')}" placeholder="캡션 입력" onchange="updateImgCaption('${img.id}',this.value)"></div>`;
+          cells += `<div class="is-cell" draggable="true"
+            ondragstart="imgDragStart(event,${p},${ci})" ondragover="imgDragOver(event)"
+            ondrop="imgDrop(event,${p},${ci})" ondragend="imgDragEnd()">
+            ${imageSheet.captionPosition==='top' ? capHtml : ''}
+            <div class="is-img-wrap"><img src="${img.url}" alt="${esc(img.caption||'')}">
+              <button class="is-del-btn" onclick="deleteImgFile('${img.id}')">✕</button></div>
+            ${imageSheet.captionPosition==='bottom' ? capHtml : ''}
+            ${splitBtns}</div>`;
+        }
       }
     }
-    const canDelete = pageCount > 1 || imageSheet.images.filter(im=>im.pageIndex===p).length > 0;
     html += `<div class="is-page">
       <div class="is-page-num">페이지 ${p+1} / ${pageCount}
         <button onclick="deleteImgSheetPage(${p})" class="btn btn-danger btn-sm" style="padding:1px 7px;margin-left:8px;font-size:10px">페이지 삭제</button>
@@ -1312,7 +1452,7 @@ function syncImgSheetUI() {
 function clearQuote() {
   if (!confirm('견적 내역을 초기화하시겠습니까?')) return;
   quoteGroups=[]; ungroupedItems=[]; activeGroupId=null; editingQuoteId=null;
-  imageSheet = { layout: '2x2', captionPosition: 'bottom', pageCount: 1, images: [] };
+  imageSheet = { layout: '2x2', captionPosition: 'bottom', pageCount: 1, images: [], cellSplits: {} };
   document.getElementById('inp-client').value  = '';
   document.getElementById('inp-project').value = '';
   document.getElementById('inp-date').value    = today();
@@ -1408,7 +1548,7 @@ async function saveQuote() {
   // 이미지 시트: 저장 가능한 데이터만 추출 (uploading/error 제외)
   const savedImages = imageSheet.images
     .filter(im => !im.uploading && !im.error && im.url)
-    .map(im => ({ id: im.id, url: im.url, caption: im.caption||'', storagePath: im.storagePath||'' }));
+    .map(im => ({ id: im.id, url: im.url, caption: im.caption||'', storagePath: im.storagePath||'', pageIndex: im.pageIndex||0, cellIndex: im.cellIndex||0, split: im.split||null }));
   const entry = {
     id:      newId,
     client,  project: document.getElementById('inp-project').value.trim(),
@@ -1417,7 +1557,7 @@ async function saveQuote() {
     version: 3,
     groups:  clone(quoteGroups),
     ungroupedItems: clone(ungroupedItems),
-    imageSheet: { layout: imageSheet.layout, captionPosition: imageSheet.captionPosition, pageCount: imageSheet.pageCount||1, images: savedImages },
+    imageSheet: { layout: imageSheet.layout, captionPosition: imageSheet.captionPosition, pageCount: imageSheet.pageCount||1, images: savedImages, cellSplits: imageSheet.cellSplits || {} },
     supply: sup, tax, total: sup+tax,
     savedAt: new Date().toISOString()
   };
@@ -1725,44 +1865,58 @@ async function exportExcel() {
       for (let r = 0; r < iRows; r++) wsI.getRow(imgStartRow + r).height = iRowH;
       const capBotRow = imgStartRow + iRows;
 
-      // 병렬 fetch + 자연 크기 측정
+      // 병렬 fetch + 자연 크기 측정 (split 셀 포함)
       const fetchTasks = [];
       for (let ci = 0; ci < perPage; ci++) {
-        const img = xlsImgs.find(im => im.pageIndex === p && im.cellIndex === ci);
-        if (!img) continue;
         const r = Math.floor(ci / iCols);
         const c = ci % iCols;
-        fetchTasks.push(
-          fetchImgBase64(img.url).then(async b64 => {
-            if (!b64) return { b64: null, img, r, c, ext: 'jpeg', natW: 1, natH: 1 };
-            let ext = 'jpeg';
-            if ((img.storagePath||'').match(/\.png$/i) || img.url.includes('png')) ext = 'png';
-            else if ((img.storagePath||'').match(/\.gif$/i)) ext = 'gif';
-            const size = await getImgNaturalSize(b64, ext);
-            return { b64, img, r, c, ext, ...size };
-          })
-        );
+        const sKey = `${p}-${ci}`;
+        const splitType = (imageSheet.cellSplits || {})[sKey];
+        const candidates = splitType
+          ? [
+              { img: xlsImgs.find(im => im.pageIndex===p && im.cellIndex===ci && im.split===(splitType==='horizontal'?'top':'left')),   splitPos: splitType==='horizontal'?'top':'left'   },
+              { img: xlsImgs.find(im => im.pageIndex===p && im.cellIndex===ci && im.split===(splitType==='horizontal'?'bottom':'right')), splitPos: splitType==='horizontal'?'bottom':'right' }
+            ]
+          : [{ img: xlsImgs.find(im => im.pageIndex===p && im.cellIndex===ci && !im.split), splitPos: null }];
+        for (const { img, splitPos } of candidates) {
+          if (!img) continue;
+          fetchTasks.push(
+            fetchImgBase64(img.url).then(async b64 => {
+              if (!b64) return { b64: null, img, r, c, ext: 'jpeg', natW: 1, natH: 1, splitType, splitPos };
+              let ext = 'jpeg';
+              if ((img.storagePath||'').match(/\.png$/i) || img.url.includes('png')) ext = 'png';
+              else if ((img.storagePath||'').match(/\.gif$/i)) ext = 'gif';
+              const size = await getImgNaturalSize(b64, ext);
+              return { b64, img, r, c, ext, ...size, splitType, splitPos };
+            })
+          );
+        }
       }
       const fetched = await Promise.all(fetchTasks);
 
-      for (const { b64, img, r, c, ext, natW, natH } of fetched) {
+      for (const { b64, img, r, c, ext, natW, natH, splitType, splitPos } of fetched) {
         if (!b64) continue;
         const imgId = wb.addImage({ base64: b64, extension: ext });
 
-        // contain-fit: 원본 비율 유지하며 셀 안에 최대 크기로 중앙 배치
-        const pad = cellPxW * 0.04;
-        const availW = cellPxW - 2 * pad;
-        const availH = cellPxH - 2 * pad;
-        const imgRatio = natW / natH;
-        const cellRatio = availW / availH;
-        let dispW, dispH;
-        if (imgRatio > cellRatio) {
-          dispW = availW; dispH = availW / imgRatio;
-        } else {
-          dispH = availH; dispW = availH * imgRatio;
+        // sub-area 계산 (분할 시 절반 영역)
+        let subW = cellPxW, subH = cellPxH, offX = 0, offY = 0;
+        if (splitType === 'horizontal') {
+          subH = cellPxH / 2;
+          if (splitPos === 'bottom') offY = cellPxH / 2;
+        } else if (splitType === 'vertical') {
+          subW = cellPxW / 2;
+          if (splitPos === 'right') offX = cellPxW / 2;
         }
-        const xOff = pad + (availW - dispW) / 2;
-        const yOff = pad + (availH - dispH) / 2;
+
+        // contain-fit: 원본 비율 유지하며 sub-area 안에 중앙 배치
+        const pad = Math.min(subW, subH) * 0.04;
+        const availW = subW - 2*pad, availH = subH - 2*pad;
+        const imgRatio = natW / natH, cellRatio = availW / availH;
+        let dispW, dispH;
+        if (imgRatio > cellRatio) { dispW = availW; dispH = availW / imgRatio; }
+        else                       { dispH = availH; dispW = availH * imgRatio; }
+        const xOff = offX + pad + (availW - dispW) / 2;
+        const yOff = offY + pad + (availH - dispH) / 2;
         const tlCol = c + xOff / cellPxW;
         const tlRow = (imgStartRow - 1 + r) + yOff / cellPxH;
 
@@ -1926,27 +2080,40 @@ function buildImgSheetPrintPages() {
   const { cols, rows } = IS_LAYOUTS[imageSheet.layout] || IS_LAYOUTS['2x2'];
   const perPage = cols * rows;
   const pageCount = imageSheet.pageCount || Math.ceil(validImgs.length / perPage) || 1;
+  const capPos = imageSheet.captionPosition;
+  const capStyle = 'font-size:8pt;color:#555;padding:2px 4px;text-align:center;flex-shrink:0';
+  function imgSlot(img, extraStyle) {
+    if (!img) return `<div style="flex:1;border:1px solid #ddd;background:#f5f5f5${extraStyle||''}"></div>`;
+    const capTop = capPos==='top' && img.caption ? `<div style="${capStyle};border-bottom:1px solid #eee">${esc(img.caption)}</div>` : '';
+    const capBot = capPos==='bottom' && img.caption ? `<div style="${capStyle};border-top:1px solid #eee">${esc(img.caption)}</div>` : '';
+    return `<div style="flex:1;display:flex;flex-direction:column;overflow:hidden;border:1px solid #ccc${extraStyle||''}">
+      ${capTop}<div style="flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff">
+        <img src="${img.url}" style="max-width:100%;max-height:100%;object-fit:contain">
+      </div>${capBot}</div>`;
+  }
   let html = '';
   for (let p = 0; p < pageCount; p++) {
     let cells = '';
     for (let i = 0; i < perPage; i++) {
-      const img = validImgs.find(im => im.pageIndex === p && im.cellIndex === i);
-      if (!img) { cells += `<div style="border:1px solid #ccc;background:#f5f5f5"></div>`; continue; }
-      const capStyle = 'font-size:8pt;color:#555;padding:2px 4px;text-align:center;flex-shrink:0';
-      const capTop = imageSheet.captionPosition==='top' && img.caption ? `<div style="${capStyle};border-bottom:1px solid #eee">${esc(img.caption)}</div>` : '';
-      const capBot = imageSheet.captionPosition==='bottom' && img.caption ? `<div style="${capStyle};border-top:1px solid #eee">${esc(img.caption)}</div>` : '';
-      cells += `<div style="border:1px solid #ccc;display:flex;flex-direction:column;overflow:hidden">
-        ${capTop}
-        <div style="flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff">
-          <img src="${img.url}" style="max-width:100%;max-height:100%;object-fit:contain">
-        </div>
-        ${capBot}
-      </div>`;
+      const sKey = `${p}-${i}`;
+      const splitType = (imageSheet.cellSplits || {})[sKey];
+      if (splitType) {
+        const isH = splitType === 'horizontal';
+        const part1 = isH ? 'top' : 'left';
+        const part2 = isH ? 'bottom' : 'right';
+        const img1 = validImgs.find(im => im.pageIndex===p && im.cellIndex===i && im.split===part1);
+        const img2 = validImgs.find(im => im.pageIndex===p && im.cellIndex===i && im.split===part2);
+        cells += `<div style="display:flex;flex-direction:${isH?'column':'row'};overflow:hidden;border:1px solid #ccc">
+          ${imgSlot(img1,';border:none')}
+          <div style="${isH?'height:1px;width:100%':'width:1px;height:100%'};background:#ccc;flex-shrink:0"></div>
+          ${imgSlot(img2,';border:none')}</div>`;
+      } else {
+        const img = validImgs.find(im => im.pageIndex===p && im.cellIndex===i && !im.split);
+        cells += imgSlot(img);
+      }
     }
     html += `<div class="imgsheet-print-page" style="page-break-before:always;width:100%;height:100vh;box-sizing:border-box;padding:16px;font-family:'맑은 고딕','Malgun Gothic',sans-serif">
-      <div style="display:grid;width:100%;height:100%;grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr);gap:8px">
-        ${cells}
-      </div>
+      <div style="display:grid;width:100%;height:100%;grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr);gap:8px">${cells}</div>
     </div>`;
   }
   return html;
@@ -2123,10 +2290,10 @@ function loadQuote(id) {
   }
   // v3: 이미지 시트 복원
   if (entry.version >= 3 && entry.imageSheet) {
-    imageSheet = { layout: entry.imageSheet.layout||'2x2', captionPosition: entry.imageSheet.captionPosition||'bottom', pageCount: entry.imageSheet.pageCount||1, images: clone(entry.imageSheet.images||[]) };
-    migrateImgSheet(imageSheet); // pageIndex/cellIndex 없는 구 데이터 마이그레이션
+    imageSheet = { layout: entry.imageSheet.layout||'2x2', captionPosition: entry.imageSheet.captionPosition||'bottom', pageCount: entry.imageSheet.pageCount||1, images: clone(entry.imageSheet.images||[]), cellSplits: clone(entry.imageSheet.cellSplits || {}) };
+    migrateImgSheet(imageSheet); // pageIndex/cellIndex/split 없는 구 데이터 마이그레이션
   } else {
-    imageSheet = { layout: '2x2', captionPosition: 'bottom', pageCount: 1, images: [] };
+    imageSheet = { layout: '2x2', captionPosition: 'bottom', pageCount: 1, images: [], cellSplits: {} };
   }
   activeGroupId  = quoteGroups.length ? quoteGroups[0].id : null;
   editingQuoteId = entry.id;
