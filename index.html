@@ -1282,6 +1282,16 @@ async function fetchImgBase64(url) {
   } catch(e) { console.warn('이미지 fetch 실패:', url, e); return null; }
 }
 
+function getImgNaturalSize(b64, ext) {
+  return new Promise(resolve => {
+    const el = new Image();
+    el.onload  = () => resolve({ natW: el.naturalWidth,  natH: el.naturalHeight });
+    el.onerror = () => resolve({ natW: 1, natH: 1 });
+    const mime = ext === 'png' ? 'png' : ext === 'gif' ? 'gif' : 'jpeg';
+    el.src = `data:image/${mime};base64,${b64}`;
+  });
+}
+
 async function deleteAllImgSheetFiles(quoteId) {
   if (!window.fbStorage || !window.fbStorageFS?.listAll) return;
   try {
@@ -1698,55 +1708,70 @@ async function exportExcel() {
     const { cols: iCols, rows: iRows } = IS_LAYOUTS[imageSheet.layout] || IS_LAYOUTS['2x2'];
     const perPage = iCols * iRows;
     const wsI = wb.addWorksheet('이미지 시트');
-    // A4 기준 열 너비 (character 단위, 1ch ≈ 7.5px): cols개 열로 균등 분할
-    // A4 = 210mm ≈ 794px @ 96dpi → 794/7.5 ≈ 106ch → 각 열 = 106/cols
-    const iColW = Math.max(10, Math.round(96 / iCols));
+    // A4 여백 포함 실사용 폭 ≈ 643px → 각 열 너비(chars, 1ch ≈ 7px)
+    const iColW = Math.max(10, Math.round(92 / iCols));
     for (let c = 1; c <= iCols; c++) wsI.getColumn(c).width = iColW;
-    // 행 높이 (points, 1pt ≈ 1.33px @ 96dpi):
-    // 각 이미지 행 = A4 높이 / rows ≈ 297mm@96dpi = 1123px / rows → pt = px*0.75
-    const iRowH = Math.max(80, Math.round((1123 / iRows) * 0.75));
-    const capRowH = 18; // 캡션 행 높이(pt)
-    const hasCap = imageSheet.captionPosition;
+    // A4 여백 포함 실사용 높이 ≈ 972px → 각 행 높이(pt, 1pt = 4/3px)
+    const iRowH = Math.max(80, Math.round((972 / iRows) * 0.75));
+    const capRowH = 18;
     const totalPages = imageSheet.pageCount || Math.ceil(xlsImgs.length / perPage) || 1;
+    // 셀 픽셀 크기 (비율 계산용): 1ch ≈ 7px, 1pt = 4/3px
+    const cellPxW = iColW * 7;
+    const cellPxH = iRowH * (4 / 3);
     let iRow = 1;
 
     for (let p = 0; p < totalPages; p++) {
       const imgStartRow = iRow;
-      // 이미지 행 높이 설정
       for (let r = 0; r < iRows; r++) wsI.getRow(imgStartRow + r).height = iRowH;
-      // 캡션 위쪽 행 높이
-      const capTopRow = imgStartRow + iRows;
       const capBotRow = imgStartRow + iRows;
-      if (hasCap === 'top') {
-        // 캡션 행을 이미지 위에 두려면 레이아웃이 달라지므로 여기서는 아래에만 추가
-      }
 
-      // 이미지 배치 (Promise.all로 병렬 fetch)
+      // 병렬 fetch + 자연 크기 측정
       const fetchTasks = [];
       for (let ci = 0; ci < perPage; ci++) {
-        const img = xlsImgs.find(im =>
-          im.pageIndex === p && im.cellIndex === ci
-        ) || xlsImgs[p * perPage + ci]; // 구조 마이그레이션: pageIndex 없으면 순서 기반
+        const img = xlsImgs.find(im => im.pageIndex === p && im.cellIndex === ci)
+                  || xlsImgs[p * perPage + ci];
         if (!img) continue;
         const r = Math.floor(ci / iCols);
         const c = ci % iCols;
         fetchTasks.push(
-          fetchImgBase64(img.url).then(b64 => ({ b64, img, r, c }))
+          fetchImgBase64(img.url).then(async b64 => {
+            if (!b64) return { b64: null, img, r, c, ext: 'jpeg', natW: 1, natH: 1 };
+            let ext = 'jpeg';
+            if ((img.storagePath||'').match(/\.png$/i) || img.url.includes('png')) ext = 'png';
+            else if ((img.storagePath||'').match(/\.gif$/i)) ext = 'gif';
+            const size = await getImgNaturalSize(b64, ext);
+            return { b64, img, r, c, ext, ...size };
+          })
         );
       }
       const fetched = await Promise.all(fetchTasks);
-      for (const { b64, img, r, c } of fetched) {
+
+      for (const { b64, img, r, c, ext, natW, natH } of fetched) {
         if (!b64) continue;
-        let ext = 'jpeg';
-        if ((img.storagePath||'').match(/\.png$/i) || img.url.includes('png')) ext = 'png';
-        else if ((img.storagePath||'').match(/\.gif$/i)) ext = 'gif';
         const imgId = wb.addImage({ base64: b64, extension: ext });
-        // br 방식으로 셀 경계에 맞춰 이미지 배치
+
+        // contain-fit: 원본 비율 유지하며 셀 안에 최대 크기로 중앙 배치
+        const pad = cellPxW * 0.04;
+        const availW = cellPxW - 2 * pad;
+        const availH = cellPxH - 2 * pad;
+        const imgRatio = natW / natH;
+        const cellRatio = availW / availH;
+        let dispW, dispH;
+        if (imgRatio > cellRatio) {
+          dispW = availW; dispH = availW / imgRatio;
+        } else {
+          dispH = availH; dispW = availH * imgRatio;
+        }
+        const xOff = pad + (availW - dispW) / 2;
+        const yOff = pad + (availH - dispH) / 2;
+        const tlCol = c + xOff / cellPxW;
+        const tlRow = (imgStartRow - 1 + r) + yOff / cellPxH;
+
         wsI.addImage(imgId, {
-          tl: { col: c + 0.05, row: imgStartRow - 1 + r + 0.05 },
-          br: { col: c + 0.95, row: imgStartRow + r - 0.05 }
+          tl: { col: tlCol, row: tlRow },
+          ext: { width: Math.round(dispW), height: Math.round(dispH) }
         });
-        // 캡션 행에 텍스트 기록
+
         if (img.caption) {
           wsI.getRow(capBotRow + r).height = capRowH;
           const capCell = wsI.getCell(capBotRow + r, c + 1);
@@ -1757,9 +1782,8 @@ async function exportExcel() {
         }
       }
       iRow = imgStartRow + iRows;
-      // 캡션 행 있으면 한 번씩 추가
-      if (xlsImgs.some(im => im.caption && (im.pageIndex===p || (im.pageIndex===undefined)))) iRow += iRows;
-      iRow += 2; // 페이지 구분 여백
+      if (xlsImgs.some(im => im.caption && (im.pageIndex === p || im.pageIndex === undefined))) iRow += iRows;
+      iRow += 2;
     }
   }
 
