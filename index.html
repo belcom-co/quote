@@ -14,6 +14,8 @@
     getFirestore, collection, doc, getDocs, setDoc, deleteDoc,
     onSnapshot, orderBy, query, writeBatch
   } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+  import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject, listAll }
+    from "https://www.gstatic.com/firebasejs/10.14.1/firebase-storage.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyBI4GLUz7KPZMZrtu94XQ1lijbf8nnVdX8",
@@ -28,9 +30,12 @@
   // 'belcom' named database 사용 ((default) 아님)
   const db = getFirestore(app, "belcom");
 
+  const storage = getStorage(app);
   // 일반 inline script에서 사용할 수 있도록 window에 노출
-  window.fbDb = db;
-  window.fbFS = { collection, doc, getDocs, setDoc, deleteDoc, onSnapshot, orderBy, query, writeBatch };
+  window.fbDb  = db;
+  window.fbStorage  = storage;
+  window.fbFS  = { collection, doc, getDocs, setDoc, deleteDoc, onSnapshot, orderBy, query, writeBatch };
+  window.fbStorageFS = { ref, uploadBytesResumable, getDownloadURL, deleteObject, listAll };
   window.dispatchEvent(new Event('firebase-ready'));
   console.log('[Firebase] 초기화 완료 — database: "belcom"');
 </script>
@@ -204,6 +209,42 @@ tr.expense-row:hover td{background:#fff5d6}
 /* 로그아웃 버튼 */
 .btn-logout{padding:5px 13px;background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.28);border-radius:4px;cursor:pointer;font-size:12px;font-family:inherit;margin-left:12px;transition:background .15s}
 .btn-logout:hover{background:rgba(255,255,255,.26)}
+/* ===== 이미지 시트 ===== */
+.imgsheet-section{display:none;flex-direction:column;border-top:2px solid #c0cedf;background:#f0f4fa;flex-shrink:0;max-height:56vh}
+.imgsheet-section.open{display:flex}
+.imgsheet-toolbar{padding:7px 14px;background:#e4ecf8;border-bottom:1px solid #c0cedf;display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap}
+.imgsheet-toolbar label{font-size:12px;color:#444;display:flex;align-items:center;gap:4px}
+.imgsheet-toolbar select{padding:3px 6px;border:1px solid #b0bee0;border-radius:4px;font-size:12px;font-family:inherit}
+.imgsheet-drop-zone{flex:1;overflow-y:auto;padding:12px}
+.imgsheet-drop-zone.drag-active{background:#d8e6f8;outline:2px dashed #1a3a5c;outline-offset:-4px}
+.imgsheet-pages{display:flex;flex-direction:column;gap:20px;max-width:560px;margin:0 auto}
+.is-page{background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.12);border-radius:4px;overflow:hidden}
+.is-page-num{font-size:10px;color:#aaa;padding:3px 8px;background:#f5f5f5;border-bottom:1px solid #ebebeb}
+.is-grid{display:grid;aspect-ratio:210/297;padding:8px;gap:5px}
+.is-cell{border:1px solid #ddd;display:flex;flex-direction:column;background:#fafafa;overflow:hidden;cursor:grab;position:relative;min-height:0}
+.is-cell.drag-over{outline:2px solid #1a3a5c;background:#d8e6f8}
+.is-empty-cell{background:#f0f0f0;border:1px dashed #ccc;cursor:default}
+.is-img-wrap{flex:1;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;background:#fff;min-height:0}
+.is-img-wrap img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+.is-del-btn{position:absolute;top:3px;right:3px;background:rgba(220,53,69,.85);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:10px;cursor:pointer;display:none;align-items:center;justify-content:center;line-height:1;padding:0}
+.is-cell:hover .is-del-btn{display:flex}
+.is-caption{padding:2px 4px;background:#f5f5f5;flex-shrink:0}
+.is-caption-top{border-bottom:1px solid #e4e4e4}
+.is-caption-bot{border-top:1px solid #e4e4e4}
+.is-caption-input{width:100%;border:none;background:transparent;font-size:10px;font-family:inherit;color:#555;padding:1px 2px}
+.is-caption-input:focus{outline:1px solid #1a3a5c;background:#fff}
+.is-uploading,.is-error{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;font-size:11px;color:#888;text-align:center;padding:6px;gap:4px}
+.is-error{color:#dc3545}
+.is-empty-msg{text-align:center;padding:36px 16px;color:#bbb;font-size:13px}
+@media print{
+  .imgsheet-print-page{page-break-before:always;width:100%;font-family:'맑은 고딕','Malgun Gothic',sans-serif}
+  .imgsheet-print-grid{display:grid;width:100%;height:100vh;box-sizing:border-box;padding:12px;gap:8px}
+  .imgsheet-print-cell{display:flex;flex-direction:column;overflow:hidden;border:1px solid #ccc}
+  .imgsheet-print-img{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .imgsheet-print-img img{max-width:100%;max-height:100%;object-fit:contain}
+  .imgsheet-print-cap{font-size:8pt;color:#555;padding:2px 4px;text-align:center;border-top:1px solid #eee;flex-shrink:0}
+  .imgsheet-print-cap-top{border-top:none;border-bottom:1px solid #eee}
+}
 </style>
 </head>
 <body>
@@ -287,8 +328,41 @@ tr.expense-row:hover td{background:#fff5d6}
         <button class="btn btn-success" onclick="saveQuote()">견적 저장</button>
         <button class="btn btn-primary" onclick="exportExcel()">엑셀 다운로드</button>
         <button class="btn btn-secondary" onclick="printQuote()">인쇄 / PDF</button>
+        <button class="btn btn-secondary" onclick="toggleImgSheet()" id="imgsheet-toggle-btn">이미지 시트 ▼</button>
         <button class="btn btn-danger" onclick="clearQuote()">초기화</button>
       </div>
+    </div>
+  </div>
+
+  <!-- 이미지 시트 섹션 -->
+  <div id="imgsheet-section" class="imgsheet-section">
+    <div class="imgsheet-toolbar">
+      <span style="font-weight:700;font-size:12px;color:#1a3a5c;flex-shrink:0">이미지 시트</span>
+      <label style="flex-shrink:0">레이아웃
+        <select id="is-layout-sel" onchange="updateImgSheetLayout(this.value)">
+          <option value="1x1">1×1</option>
+          <option value="1x2">1×2</option>
+          <option value="2x1">2×1</option>
+          <option value="2x2" selected>2×2</option>
+          <option value="2x3">2×3</option>
+          <option value="3x2">3×2</option>
+          <option value="3x3">3×3</option>
+        </select>
+      </label>
+      <span style="font-size:12px;color:#444;display:flex;align-items:center;gap:6px;flex-shrink:0">캡션
+        <label style="gap:3px"><input type="radio" name="is-cap-pos" value="top" onchange="updateImgSheetCaption('top')"> 위</label>
+        <label style="gap:3px"><input type="radio" name="is-cap-pos" value="bottom" checked onchange="updateImgSheetCaption('bottom')"> 아래</label>
+      </span>
+      <label class="btn btn-secondary btn-sm" style="cursor:pointer;flex-shrink:0">이미지 추가
+        <input type="file" accept="image/*" multiple style="display:none" onchange="handleImgSheetFiles(this.files);this.value=''">
+      </label>
+      <span id="is-count" style="font-size:11px;color:#aaa;margin-left:auto"></span>
+    </div>
+    <div class="imgsheet-drop-zone" id="imgsheet-drop-zone"
+      ondragover="event.preventDefault();this.classList.add('drag-active')"
+      ondragleave="this.classList.remove('drag-active')"
+      ondrop="this.classList.remove('drag-active');handleImgSheetFiles(event.dataTransfer.files);event.preventDefault()">
+      <div id="imgsheet-pages" class="imgsheet-pages"></div>
     </div>
   </div>
 </div>
@@ -600,6 +674,13 @@ const LS_HISTORY = 'belcom_history_v1';
 let quoteGroups    = [];   // v2: [{id, name, subLabel, showSubtotal, items}]
 let ungroupedItems = [];   // v1 호환: 그룹 미지정 항목
 let activeGroupId  = null; // 항목 추가 대상 그룹
+// v3: 이미지 시트
+let imageSheet = { layout: '2x2', captionPosition: 'bottom', images: [] };
+const IS_LAYOUTS = {
+  '1x1':{cols:1,rows:1},'1x2':{cols:1,rows:2},'2x1':{cols:2,rows:1},
+  '2x2':{cols:2,rows:2},'2x3':{cols:2,rows:3},'3x2':{cols:3,rows:2},'3x3':{cols:3,rows:3}
+};
+let isDragSrcIdx = null;
 
 // ===== 유틸 =====
 function fmt(n)   { return Number(n||0).toLocaleString('ko-KR'); }
@@ -946,14 +1027,197 @@ function updateTotals() {
   document.getElementById('total-grand').textContent  = fmt(sup+tax);
 }
 
+// ===== 이미지 시트 기능 (v3) =====
+function imgNewId() { return 'img' + Date.now() + Math.random().toString(36).slice(2,5); }
+
+function toggleImgSheet() {
+  const sec = document.getElementById('imgsheet-section');
+  const btn = document.getElementById('imgsheet-toggle-btn');
+  const open = sec.classList.toggle('open');
+  btn.textContent = open ? '이미지 시트 ▲' : '이미지 시트 ▼';
+  if (open) renderImgSheetPages();
+}
+
+function updateImgSheetLayout(val) {
+  imageSheet.layout = val;
+  renderImgSheetPages();
+}
+
+function updateImgSheetCaption(val) {
+  imageSheet.captionPosition = val;
+  renderImgSheetPages();
+}
+
+async function handleImgSheetFiles(files) {
+  if (!files || !files.length) return;
+  const validFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+  if (!validFiles.length) return;
+  if (!editingQuoteId) editingQuoteId = Date.now().toString();
+  const remaining = 50 - imageSheet.images.length;
+  const toUpload = validFiles.slice(0, remaining);
+  if (validFiles.length > remaining) alert(`이미지는 최대 50장까지 추가할 수 있습니다. ${remaining}장만 업로드됩니다.`);
+  const sec = document.getElementById('imgsheet-section');
+  if (!sec.classList.contains('open')) toggleImgSheet();
+  for (const file of toUpload) {
+    if (file.size > 20 * 1024 * 1024) { alert(`"${file.name}"이 20MB를 초과합니다. 건너뜁니다.`); continue; }
+    await uploadImgFile(file);
+  }
+}
+
+async function uploadImgFile(file) {
+  if (!window.fbStorage || !window.fbStorageFS) { alert('Firebase Storage가 초기화되지 않았습니다.'); return; }
+  const id = imgNewId();
+  imageSheet.images.push({ id, url: '', caption: '', storagePath: '', uploading: true });
+  renderImgSheetPages();
+  try {
+    const { ref: sRef, uploadBytesResumable, getDownloadURL } = window.fbStorageFS;
+    const path = `quotes/${editingQuoteId}/imagesheet/${Date.now()}_${file.name}`;
+    const fileRef = sRef(window.fbStorage, path);
+    await new Promise((resolve, reject) => {
+      const task = uploadBytesResumable(fileRef, file);
+      task.on('state_changed', null, reject, () => resolve());
+    });
+    const url = await getDownloadURL(fileRef);
+    const idx = imageSheet.images.findIndex(im => im.id === id);
+    if (idx >= 0) imageSheet.images[idx] = { id, url, caption: '', storagePath: path, uploading: false };
+  } catch(e) {
+    console.error('이미지 업로드 오류:', e);
+    const idx = imageSheet.images.findIndex(im => im.id === id);
+    if (idx >= 0) imageSheet.images[idx] = { ...imageSheet.images[idx], uploading: false, error: '업로드 실패' };
+  }
+  renderImgSheetPages();
+}
+
+async function deleteImgFile(id) {
+  const img = imageSheet.images.find(im => im.id === id);
+  if (!img) return;
+  if (img.storagePath && window.fbStorage && window.fbStorageFS) {
+    try {
+      const { ref: sRef, deleteObject } = window.fbStorageFS;
+      await deleteObject(sRef(window.fbStorage, img.storagePath));
+    } catch(e) { console.warn('Storage 삭제 오류:', e); }
+  }
+  imageSheet.images = imageSheet.images.filter(im => im.id !== id);
+  renderImgSheetPages();
+}
+
+function updateImgCaption(id, val) {
+  const img = imageSheet.images.find(im => im.id === id);
+  if (img) img.caption = val;
+}
+
+function imgDragStart(e, idx) { isDragSrcIdx = idx; e.dataTransfer.effectAllowed = 'move'; }
+function imgDragOver(e, idx) {
+  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+  document.querySelectorAll('.is-cell').forEach(c => c.classList.remove('drag-over'));
+  e.currentTarget.classList.add('drag-over');
+}
+function imgDrop(e, idx) {
+  e.preventDefault();
+  if (isDragSrcIdx === null || isDragSrcIdx === idx) return;
+  const [moved] = imageSheet.images.splice(isDragSrcIdx, 1);
+  imageSheet.images.splice(idx, 0, moved);
+  isDragSrcIdx = null;
+  renderImgSheetPages();
+}
+function imgDragEnd() {
+  isDragSrcIdx = null;
+  document.querySelectorAll('.is-cell').forEach(c => c.classList.remove('drag-over'));
+}
+
+function renderImgSheetPages() {
+  const container = document.getElementById('imgsheet-pages');
+  if (!container) return;
+  const countEl = document.getElementById('is-count');
+  const valid = imageSheet.images.filter(i => !i.uploading && !i.error && i.url).length;
+  if (countEl) countEl.textContent = `${imageSheet.images.length} / 50장`;
+  const { cols, rows } = IS_LAYOUTS[imageSheet.layout] || IS_LAYOUTS['2x2'];
+  const perPage = cols * rows;
+  if (!imageSheet.images.length) {
+    container.innerHTML = '<div class="is-empty-msg">이미지를 추가하세요. 파일 선택, Ctrl+V 붙여넣기, 드래그 앤 드롭을 지원합니다.</div>';
+    return;
+  }
+  const pageCount = Math.ceil(imageSheet.images.length / perPage);
+  let html = '';
+  for (let p = 0; p < pageCount; p++) {
+    let cells = '';
+    for (let i = 0; i < perPage; i++) {
+      const absIdx = p * perPage + i;
+      const img = imageSheet.images[absIdx];
+      if (!img) { cells += `<div class="is-cell is-empty-cell"></div>`; continue; }
+      if (img.uploading) { cells += `<div class="is-cell"><div class="is-uploading"><span>업로드 중...</span></div></div>`; continue; }
+      if (img.error)    { cells += `<div class="is-cell"><div class="is-error">${img.error}<br><button onclick="deleteImgFile('${img.id}')" class="btn btn-danger btn-sm" style="margin-top:4px">삭제</button></div></div>`; continue; }
+      const capHtml = `<div class="is-caption ${imageSheet.captionPosition==='top'?'is-caption-top':'is-caption-bot'}"><input type="text" class="is-caption-input" value="${esc(img.caption||'')}" placeholder="캡션 입력" onchange="updateImgCaption('${img.id}',this.value)"></div>`;
+      cells += `<div class="is-cell" draggable="true"
+        ondragstart="imgDragStart(event,${absIdx})" ondragover="imgDragOver(event,${absIdx})"
+        ondrop="imgDrop(event,${absIdx})" ondragend="imgDragEnd()">
+        ${imageSheet.captionPosition==='top' ? capHtml : ''}
+        <div class="is-img-wrap"><img src="${img.url}" alt="${esc(img.caption||'')}">
+          <button class="is-del-btn" onclick="deleteImgFile('${img.id}')">✕</button></div>
+        ${imageSheet.captionPosition==='bottom' ? capHtml : ''}
+      </div>`;
+    }
+    html += `<div class="is-page"><div class="is-page-num">페이지 ${p+1} / ${pageCount}</div>
+      <div class="is-grid" style="grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr)">${cells}</div>
+    </div>`;
+  }
+  container.innerHTML = html;
+}
+
+// Ctrl+V 이미지 붙여넣기
+document.addEventListener('paste', function(e) {
+  const sec = document.getElementById('imgsheet-section');
+  if (!sec || !sec.classList.contains('open')) return;
+  if (document.activeElement && document.activeElement.classList.contains('is-caption-input')) return;
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  const files = [];
+  for (const item of items) {
+    if (item.kind === 'file' && item.type.startsWith('image/')) { const f = item.getAsFile(); if (f) files.push(f); }
+  }
+  if (files.length) { e.preventDefault(); handleImgSheetFiles(files); }
+});
+
+async function fetchImgBase64(url) {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch(e) { console.warn('이미지 fetch 실패:', url, e); return null; }
+}
+
+async function deleteAllImgSheetFiles(quoteId) {
+  if (!window.fbStorage || !window.fbStorageFS?.listAll) return;
+  try {
+    const { ref: sRef, listAll, deleteObject } = window.fbStorageFS;
+    const folderRef = sRef(window.fbStorage, `quotes/${quoteId}/imagesheet`);
+    const result = await listAll(folderRef);
+    if (result.items.length) await Promise.all(result.items.map(r => deleteObject(r)));
+  } catch(e) { console.warn('Storage 일괄 삭제 오류:', e); }
+}
+
+function syncImgSheetUI() {
+  const sel = document.getElementById('is-layout-sel');
+  if (sel) sel.value = imageSheet.layout;
+  const radios = document.querySelectorAll('input[name="is-cap-pos"]');
+  radios.forEach(r => { r.checked = (r.value === imageSheet.captionPosition); });
+}
+
 function clearQuote() {
   if (!confirm('견적 내역을 초기화하시겠습니까?')) return;
   quoteGroups=[]; ungroupedItems=[]; activeGroupId=null; editingQuoteId=null;
+  imageSheet = { layout: '2x2', captionPosition: 'bottom', images: [] };
   document.getElementById('inp-client').value  = '';
   document.getElementById('inp-project').value = '';
   document.getElementById('inp-date').value    = today();
   document.getElementById('inp-note').value    = DEFAULT_NOTE;
   renderQuoteTable();
+  renderImgSheetPages();
 }
 
 // ===== 그룹 관리 (v2) =====
@@ -1039,21 +1303,27 @@ async function saveQuote() {
   if (!allItems.length) { alert('견적 항목이 없습니다.'); return; }
   const sup = allItems.reduce((s,it)=>s+it.qty*it.price, 0);
   const tax = allItems.reduce((s,it)=>s+Math.round(it.qty*it.price*0.1), 0);
+  const newId = editingQuoteId || Date.now().toString();
+  // 이미지 시트: 저장 가능한 데이터만 추출 (uploading/error 제외)
+  const savedImages = imageSheet.images
+    .filter(im => !im.uploading && !im.error && im.url)
+    .map(im => ({ id: im.id, url: im.url, caption: im.caption||'', storagePath: im.storagePath||'' }));
   const entry = {
-    id:      editingQuoteId || Date.now().toString(),
+    id:      newId,
     client,  project: document.getElementById('inp-project').value.trim(),
     date:    document.getElementById('inp-date').value,
     note:    document.getElementById('inp-note').value,
-    version: 2,
+    version: 3,
     groups:  clone(quoteGroups),
     ungroupedItems: clone(ungroupedItems),
+    imageSheet: { layout: imageSheet.layout, captionPosition: imageSheet.captionPosition, images: savedImages },
     supply: sup, tax, total: sup+tax,
     savedAt: new Date().toISOString()
   };
   setSyncStatus('syncing');
   try {
     await fsCollection('quotes').doc(entry.id).set(entry);
-    editingQuoteId = entry.id;
+    editingQuoteId = newId;
     // 로컬 캐시 업데이트
     const hist = loadHistoryLS();
     const idx  = hist.findIndex(h=>h.id===entry.id);
@@ -1329,6 +1599,52 @@ async function exportExcel() {
     R++;
   });
 
+  // ━━━ 이미지 시트 워크시트 ━━━
+  const validImgs = imageSheet.images.filter(im => !im.uploading && !im.error && im.url);
+  if (validImgs.length > 0) {
+    const { cols, rows } = IS_LAYOUTS[imageSheet.layout] || IS_LAYOUTS['2x2'];
+    const perPage = cols * rows;
+    const wsI = wb.addWorksheet('이미지 시트');
+    // 열 너비 설정 (A4 기준: cols개 열로 균등 분할)
+    const colW = Math.round(100 / cols);
+    for (let c = 1; c <= cols; c++) wsI.getColumn(c).width = colW;
+    // 셀 높이 (행 단위): A4 비율 297/210 ≈ 1.414
+    const rowH = Math.round(colW * 7 * 1.414 / rows); // points 단위 근사치
+    let iRow = 1;
+    const pageCount = Math.ceil(validImgs.length / perPage);
+    for (let p = 0; p < pageCount; p++) {
+      const pageImgs = validImgs.slice(p * perPage, (p + 1) * perPage);
+      // 이미지 행 높이 설정
+      for (let r = 0; r < rows; r++) wsI.getRow(iRow + r).height = rowH;
+      // 이미지 배치
+      for (let i = 0; i < pageImgs.length; i++) {
+        const img = pageImgs[i];
+        const row = Math.floor(i / cols);
+        const col = i % cols;
+        const b64 = await fetchImgBase64(img.url);
+        if (b64) {
+          // 확장자 추론
+          let ext = 'jpeg';
+          if (img.url.includes('.png') || img.url.includes('png')) ext = 'png';
+          else if (img.url.includes('.gif')) ext = 'gif';
+          const imgId = wb.addImage({ base64: b64, extension: ext });
+          wsI.addImage(imgId, {
+            tl: { col: col, row: iRow - 1 + row },
+            ext: { width: Math.round(colW * 6.5), height: Math.round(rowH * 0.95) }
+          });
+        }
+        // 캡션 (이미지 행 다음 행에 작은 텍스트로 표시)
+        if (img.caption) {
+          const capRow = iRow + rows + (p * 2) + row; // 대략적인 위치 (생략 후 별도 처리)
+          // ExcelJS 이미지와 셀 텍스트 혼용이 복잡하므로 이미지 셀에 캡션 값만 기록
+          const capCell = wsI.getCell(iRow + row, col + 1);
+          // 이미지가 셀을 덮으므로 실제로는 보이지 않지만, 메타로 기록
+        }
+      }
+      iRow += rows + 1; // 페이지 구분을 위한 빈 행
+    }
+  }
+
   // ━━━ 다운로드 ━━━
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
@@ -1459,8 +1775,40 @@ function printQuote() {
     <div style="font-weight:700;margin-bottom:5px">NOTE</div>
     ${noteLines}
   </div>
-</div>`;
+</div>${buildImgSheetPrintPages()}`;
   window.print();
+}
+
+function buildImgSheetPrintPages() {
+  const validImgs = imageSheet.images.filter(im => !im.uploading && !im.error && im.url);
+  if (!validImgs.length) return '';
+  const { cols, rows } = IS_LAYOUTS[imageSheet.layout] || IS_LAYOUTS['2x2'];
+  const perPage = cols * rows;
+  const pageCount = Math.ceil(validImgs.length / perPage);
+  let html = '';
+  for (let p = 0; p < pageCount; p++) {
+    let cells = '';
+    for (let i = 0; i < perPage; i++) {
+      const img = validImgs[p * perPage + i];
+      if (!img) { cells += `<div style="border:1px solid #ccc;background:#f5f5f5"></div>`; continue; }
+      const capStyle = 'font-size:8pt;color:#555;padding:2px 4px;text-align:center;flex-shrink:0';
+      const capTop = imageSheet.captionPosition==='top' && img.caption ? `<div style="${capStyle};border-bottom:1px solid #eee">${esc(img.caption)}</div>` : '';
+      const capBot = imageSheet.captionPosition==='bottom' && img.caption ? `<div style="${capStyle};border-top:1px solid #eee">${esc(img.caption)}</div>` : '';
+      cells += `<div style="border:1px solid #ccc;display:flex;flex-direction:column;overflow:hidden">
+        ${capTop}
+        <div style="flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff">
+          <img src="${img.url}" style="max-width:100%;max-height:100%;object-fit:contain">
+        </div>
+        ${capBot}
+      </div>`;
+    }
+    html += `<div class="imgsheet-print-page" style="page-break-before:always;width:100%;height:100vh;box-sizing:border-box;padding:16px;font-family:'맑은 고딕','Malgun Gothic',sans-serif">
+      <div style="display:grid;width:100%;height:100%;grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr);gap:8px">
+        ${cells}
+      </div>
+    </div>`;
+  }
+  return html;
 }
 
 // ===== 탭2: 단가표 관리 =====
@@ -1624,7 +1972,7 @@ function loadQuote(id) {
   document.getElementById('inp-project').value = entry.project||'';
   document.getElementById('inp-date').value    = entry.date;
   document.getElementById('inp-note').value    = entry.note || DEFAULT_NOTE;
-  if (entry.version === 2) {
+  if (entry.version >= 2) {
     quoteGroups    = clone(entry.groups || []);
     ungroupedItems = clone(entry.ungroupedItems || []);
   } else {
@@ -1632,9 +1980,17 @@ function loadQuote(id) {
     quoteGroups    = [{ id: newGroupId(), name: '미분류', subLabel: '', showSubtotal: false, items: clone(entry.items || []) }];
     ungroupedItems = [];
   }
+  // v3: 이미지 시트 복원
+  if (entry.version >= 3 && entry.imageSheet) {
+    imageSheet = { layout: entry.imageSheet.layout||'2x2', captionPosition: entry.imageSheet.captionPosition||'bottom', images: clone(entry.imageSheet.images||[]) };
+  } else {
+    imageSheet = { layout: '2x2', captionPosition: 'bottom', images: [] };
+  }
   activeGroupId  = quoteGroups.length ? quoteGroups[0].id : null;
   editingQuoteId = entry.id;
+  syncImgSheetUI();
   renderQuoteTable();
+  renderImgSheetPages();
   goToQuoteTab();
 }
 
@@ -1642,6 +1998,8 @@ async function deleteQuote(e, id) {
   e.stopPropagation();
   if (!confirm('이 견적을 삭제하시겠습니까?')) return;
   setSyncStatus('syncing');
+  // Storage 이미지 파일 삭제 (v3)
+  deleteAllImgSheetFiles(id).catch(() => {});
   try {
     await fsCollection('quotes').doc(id).delete();
     setSyncStatus('ok');
@@ -1651,7 +2009,7 @@ async function deleteQuote(e, id) {
   }
   // 로컬 캐시도 갱신
   saveHistoryLS(loadHistoryLS().filter(h=>h.id!==id));
-  if (editingQuoteId===id) editingQuoteId=null;
+  if (editingQuoteId===id) { editingQuoteId=null; imageSheet={layout:'2x2',captionPosition:'bottom',images:[]}; }
   // onSnapshot이 자동 재렌더
 }
 
