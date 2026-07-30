@@ -225,7 +225,9 @@ tr.expense-row:hover td{background:#fff5d6}
 .is-cell.drag-over{outline:2px solid #1a3a5c;background:#d8e6f8}
 .is-empty-cell{background:#f7f9fc;border:2px dashed #c8d8ec;cursor:pointer;transition:background .12s}
 .is-empty-cell:hover{background:#e8f0fb}
-.is-add-hint{display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;color:#b0c8e8;font-weight:300;pointer-events:none}
+.is-add-hint{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;pointer-events:none;gap:3px}
+.is-add-hint-icon{font-size:26px;color:#b0c8e8;font-weight:300;line-height:1}
+.is-add-hint-text{font-size:9px;color:#a0b8d0}
 .is-img-wrap{flex:1;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;background:#fff;min-height:0}
 .is-img-wrap img{max-width:100%;max-height:100%;object-fit:contain;display:block}
 .is-del-btn{position:absolute;top:3px;right:3px;background:rgba(220,53,69,.85);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:10px;cursor:pointer;display:none;align-items:center;justify-content:center;line-height:1;padding:0}
@@ -255,6 +257,13 @@ tr.expense-row:hover td{background:#fff5d6}
 .is-split-div-h{height:2px;background:#c0cedf;flex-shrink:0}
 .is-split-div-v{width:2px;background:#c0cedf;flex-shrink:0}
 .is-split-slot:hover .is-del-btn{display:flex}
+/* 활성 셀 */
+.is-cell-active{outline:2px solid #1a6fc4 !important;outline-offset:-2px;z-index:2}
+/* 빈 셀: 분할 버튼 항상 표시 (hover 버그 방어) */
+.is-empty-cell .is-split-btns{display:flex;opacity:0.55}
+.is-empty-cell:hover .is-split-btns{opacity:1}
+/* 이미지 셀: 분할 버튼 숨김 */
+.is-cell:not(.is-empty-cell) .is-split-btns{display:none !important}
 @media print{
   .imgsheet-print-page{page-break-before:always;width:100%;font-family:'맑은 고딕','Malgun Gothic',sans-serif}
   .imgsheet-print-grid{display:grid;width:100%;height:100vh;box-sizing:border-box;padding:12px;gap:8px}
@@ -342,7 +351,7 @@ tr.expense-row:hover td{background:#fff5d6}
         <label>NOTE</label>
         <textarea id="inp-note" rows="3">1. 상기 견적서 유효기간은 2주일 입니다.
 2. 상기 견적서 타 업체 공개를 금합니다.
-3. 컨텐츠 내 일부 수정사항 2회까지 무상 반영되며, 추가 수정은 별도 비용이 발생할 수 있습니다.</textarea>
+3. 컨텐츠 견적의 경우, 일부 수정사항 2회까지 무상 반영되며,  추가 수정은 별도 비용이 발생할 수 있습니다.</textarea>
       </div>
       <div class="action-bar">
         <button class="btn btn-success" onclick="saveQuote()">견적 저장</button>
@@ -684,7 +693,7 @@ function setSyncStatus(status, text) {
 }
 
 // ===== 상태 =====
-const DEFAULT_NOTE = '1. 상기 견적서 유효기간은 2주일 입니다.\n2. 상기 견적서 타 업체 공개를 금합니다.\n3. 컨텐츠 내 일부 수정사항 2회까지 무상 반영되며, 추가 수정은 별도 비용이 발생할 수 있습니다.';
+const DEFAULT_NOTE = '1. 상기 견적서 유효기간은 2주일 입니다.\n2. 상기 견적서 타 업체 공개를 금합니다.\n3. 컨텐츠 견적의 경우, 일부 수정사항 2회까지 무상 반영되며,  추가 수정은 별도 비용이 발생할 수 있습니다.';
 let priceData    = {};
 let quoteItems   = [];
 let quoteHistory = [];
@@ -1136,6 +1145,33 @@ function deleteImgSheetPage(p) {
   renderImgSheetPages();
 }
 
+// ===== 활성 셀 (Ctrl+V 붙여넣기 타깃) =====
+function setActiveCell(p, ci, split) {
+  clearActiveCell();
+  activeCell = { pageIndex: p, cellIndex: ci, split: split ?? null };
+  const el = document.querySelector(`[data-cell-key="${p}-${ci}"]`);
+  if (el) el.classList.add('is-cell-active');
+}
+function clearActiveCell() {
+  activeCell = null;
+  document.querySelectorAll('.is-cell-active').forEach(el => el.classList.remove('is-cell-active'));
+}
+
+// 빈 셀 클릭: 첫 클릭 → 활성화, 이미 활성화된 셀 클릭 → 파일 선택 열기
+function emptyCellClick(e, p, ci) {
+  if (activeCell?.pageIndex === p && activeCell?.cellIndex === ci && !activeCell?.split) {
+    openCellPicker(p, ci);
+    clearActiveCell();
+  } else {
+    setActiveCell(p, ci, null);
+  }
+}
+// 이미지 있는 셀 클릭 → 활성화 (Ctrl+V로 교체 가능)
+function imgCellClick(e, p, ci) {
+  if (e.target.classList.contains('is-del-btn') || e.target.classList.contains('is-caption-input')) return;
+  setActiveCell(p, ci, null);
+}
+
 // 빈 셀 클릭 시 해당 위치로 업로드 (hidden file input 재사용)
 function openCellPicker(pageIndex, cellIndex) {
   const inp = document.getElementById('is-cell-picker');
@@ -1254,7 +1290,8 @@ function updateImgCaption(id, val) {
 }
 
 // 드래그 시작: {pageIndex, cellIndex} 저장
-let isDragSrc = null;
+let isDragSrc  = null;
+let activeCell = null; // { pageIndex, cellIndex, split } — Ctrl+V 붙여넣기 대상 셀
 function imgDragStart(e, p, ci) {
   isDragSrc = { pageIndex: p, cellIndex: ci };
   e.dataTransfer.effectAllowed = 'move';
@@ -1363,23 +1400,25 @@ function renderImgSheetPages() {
           <button class="is-split-btn" onclick="event.stopPropagation();splitCell(${p},${ci},'vertical')" title="좌/우 분할">⊞ 좌우</button>
         </div>`;
         if (!img) {
-          cells += `<div class="is-cell is-empty-cell" onclick="openCellPicker(${p},${ci})"
+          cells += `<div class="is-cell is-empty-cell" data-cell-key="${p}-${ci}"
+            onclick="emptyCellClick(event,${p},${ci})"
             ondragover="imgDragOver(event)" ondrop="imgDrop(event,${p},${ci})">
-            <div class="is-add-hint">+</div>${splitBtns}</div>`;
+            <div class="is-add-hint"><span class="is-add-hint-icon">+</span><span class="is-add-hint-text">클릭 또는 Ctrl+V</span></div>
+            ${splitBtns}</div>`;
         } else if (img.uploading) {
-          cells += `<div class="is-cell"><div class="is-uploading"><span>업로드 중...</span></div>${splitBtns}</div>`;
+          cells += `<div class="is-cell" data-cell-key="${p}-${ci}"><div class="is-uploading"><span>업로드 중...</span></div></div>`;
         } else if (img.error) {
-          cells += `<div class="is-cell"><div class="is-error">${img.error}<br><button onclick="deleteImgFile('${img.id}')" class="btn btn-danger btn-sm" style="margin-top:4px">삭제</button></div>${splitBtns}</div>`;
+          cells += `<div class="is-cell" data-cell-key="${p}-${ci}"><div class="is-error">${img.error}<br><button onclick="deleteImgFile('${img.id}')" class="btn btn-danger btn-sm" style="margin-top:4px">삭제</button></div></div>`;
         } else {
           const capHtml = `<div class="is-caption ${imageSheet.captionPosition==='top'?'is-caption-top':'is-caption-bot'}"><input type="text" class="is-caption-input" value="${esc(img.caption||'')}" placeholder="캡션 입력" onchange="updateImgCaption('${img.id}',this.value)"></div>`;
-          cells += `<div class="is-cell" draggable="true"
+          cells += `<div class="is-cell" data-cell-key="${p}-${ci}" draggable="true"
+            onclick="imgCellClick(event,${p},${ci})"
             ondragstart="imgDragStart(event,${p},${ci})" ondragover="imgDragOver(event)"
             ondrop="imgDrop(event,${p},${ci})" ondragend="imgDragEnd()">
             ${imageSheet.captionPosition==='top' ? capHtml : ''}
             <div class="is-img-wrap"><img src="${img.url}" alt="${esc(img.caption||'')}">
               <button class="is-del-btn" onclick="deleteImgFile('${img.id}')">✕</button></div>
-            ${imageSheet.captionPosition==='bottom' ? capHtml : ''}
-            ${splitBtns}</div>`;
+            ${imageSheet.captionPosition==='bottom' ? capHtml : ''}</div>`;
         }
       }
     }
@@ -1394,20 +1433,50 @@ function renderImgSheetPages() {
     <button class="btn btn-secondary btn-sm" onclick="addImgSheetPage()">+ 페이지 추가</button>
   </div>`;
   container.innerHTML = html;
+  // 렌더 후 활성 셀 강조 복원
+  if (activeCell) {
+    const el = container.querySelector(`[data-cell-key="${activeCell.pageIndex}-${activeCell.cellIndex}"]`);
+    if (el) el.classList.add('is-cell-active');
+  }
 }
 
-// Ctrl+V 이미지 붙여넣기
-document.addEventListener('paste', function(e) {
+// Ctrl+V 이미지 붙여넣기 (활성 셀 우선)
+document.addEventListener('paste', async function(e) {
   const sec = document.getElementById('imgsheet-section');
   if (!sec || !sec.classList.contains('open')) return;
-  if (document.activeElement && document.activeElement.classList.contains('is-caption-input')) return;
+  if (document.activeElement?.classList.contains('is-caption-input')) return;
   const items = e.clipboardData?.items;
   if (!items) return;
   const files = [];
   for (const item of items) {
     if (item.kind === 'file' && item.type.startsWith('image/')) { const f = item.getAsFile(); if (f) files.push(f); }
   }
-  if (files.length) { e.preventDefault(); handleImgSheetFiles(files); }
+  if (!files.length) return;
+  e.preventDefault();
+  if (activeCell) {
+    const { pageIndex: ap, cellIndex: ac, split: asp } = activeCell;
+    const existImg = asp ? getImgAtSubCell(ap, ac, asp) : getImgAtCell(ap, ac);
+    if (existImg) {
+      if (!confirm('현재 셀의 이미지를 교체하시겠습니까?')) return;
+      await deleteImgFile(existImg.id);
+    }
+    clearActiveCell();
+    await handleImgSheetFiles(files, ap, ac, asp);
+  } else {
+    handleImgSheetFiles(files);
+  }
+});
+
+// 이미지 시트 영역 밖 클릭 → 활성 셀 해제
+document.addEventListener('click', function(e) {
+  if (!activeCell) return;
+  const sec = document.getElementById('imgsheet-section');
+  if (sec && !sec.contains(e.target)) clearActiveCell();
+});
+
+// ESC → 활성 셀 해제
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && activeCell) clearActiveCell();
 });
 
 async function fetchImgBase64(url) {
