@@ -1728,8 +1728,7 @@ async function exportExcel() {
       // 병렬 fetch + 자연 크기 측정
       const fetchTasks = [];
       for (let ci = 0; ci < perPage; ci++) {
-        const img = xlsImgs.find(im => im.pageIndex === p && im.cellIndex === ci)
-                  || xlsImgs[p * perPage + ci];
+        const img = xlsImgs.find(im => im.pageIndex === p && im.cellIndex === ci);
         if (!img) continue;
         const r = Math.floor(ci / iCols);
         const c = ci % iCols;
@@ -1926,12 +1925,12 @@ function buildImgSheetPrintPages() {
   if (!validImgs.length) return '';
   const { cols, rows } = IS_LAYOUTS[imageSheet.layout] || IS_LAYOUTS['2x2'];
   const perPage = cols * rows;
-  const pageCount = Math.ceil(validImgs.length / perPage);
+  const pageCount = imageSheet.pageCount || Math.ceil(validImgs.length / perPage) || 1;
   let html = '';
   for (let p = 0; p < pageCount; p++) {
     let cells = '';
     for (let i = 0; i < perPage; i++) {
-      const img = validImgs[p * perPage + i];
+      const img = validImgs.find(im => im.pageIndex === p && im.cellIndex === i);
       if (!img) { cells += `<div style="border:1px solid #ccc;background:#f5f5f5"></div>`; continue; }
       const capStyle = 'font-size:8pt;color:#555;padding:2px 4px;text-align:center;flex-shrink:0';
       const capTop = imageSheet.captionPosition==='top' && img.caption ? `<div style="${capStyle};border-bottom:1px solid #eee">${esc(img.caption)}</div>` : '';
