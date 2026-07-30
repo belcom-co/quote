@@ -340,8 +340,9 @@ tr.expense-row:hover td{background:#fff5d6}
       </div>
       <div class="note-bar">
         <label>NOTE</label>
-        <textarea id="inp-note" rows="2">1. 상기 견적서 유효기간은 2주일 입니다.
-2. 상기 견적서 타 업체 공개를 금합니다.</textarea>
+        <textarea id="inp-note" rows="3">1. 상기 견적서 유효기간은 2주일 입니다.
+2. 상기 견적서 타 업체 공개를 금합니다.
+3. 컨텐츠 내 일부 수정사항 2회까지 무상 반영되며, 추가 수정은 별도 비용이 발생할 수 있습니다.</textarea>
       </div>
       <div class="action-bar">
         <button class="btn btn-success" onclick="saveQuote()">견적 저장</button>
@@ -683,7 +684,7 @@ function setSyncStatus(status, text) {
 }
 
 // ===== 상태 =====
-const DEFAULT_NOTE = '1. 상기 견적서 유효기간은 2주일 입니다.\n2. 상기 견적서 타 업체 공개를 금합니다.';
+const DEFAULT_NOTE = '1. 상기 견적서 유효기간은 2주일 입니다.\n2. 상기 견적서 타 업체 공개를 금합니다.\n3. 컨텐츠 내 일부 수정사항 2회까지 무상 반영되며, 추가 수정은 별도 비용이 발생할 수 있습니다.';
 let priceData    = {};
 let quoteItems   = [];
 let quoteHistory = [];
