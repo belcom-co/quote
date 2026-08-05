@@ -210,8 +210,11 @@ tr.expense-row:hover td{background:#fff5d6}
 .btn-logout{padding:5px 13px;background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.28);border-radius:4px;cursor:pointer;font-size:12px;font-family:inherit;margin-left:12px;transition:background .15s}
 .btn-logout:hover{background:rgba(255,255,255,.26)}
 /* ===== 이미지 시트 ===== */
-.imgsheet-section{display:none;flex-direction:column;border-top:2px solid #c0cedf;background:#f0f4fa;flex-shrink:0;max-height:56vh}
+.imgsheet-section{display:none;flex-direction:column;border-top:2px solid #c0cedf;background:#f0f4fa;flex-shrink:0;max-height:56vh;min-height:200px}
 .imgsheet-section.open{display:flex}
+.quote-splitter{display:none;height:5px;background:#d0d8e8;cursor:row-resize;flex-shrink:0;position:relative;user-select:none;transition:background .15s}
+.quote-splitter:hover,.quote-splitter.dragging{background:#8aaac8}
+.quote-splitter::after{content:'· · ·';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:10px;color:#888;letter-spacing:3px;line-height:1;pointer-events:none}
 .imgsheet-toolbar{padding:7px 14px;background:#e4ecf8;border-bottom:1px solid #c0cedf;display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap}
 .imgsheet-toolbar label{font-size:12px;color:#444;display:flex;align-items:center;gap:4px}
 .imgsheet-toolbar select{padding:3px 6px;border:1px solid #b0bee0;border-radius:4px;font-size:12px;font-family:inherit}
@@ -370,6 +373,9 @@ tr.expense-row:hover td{background:#fff5d6}
       </div>
     </div>
   </div>
+
+  <!-- 리사이저 -->
+  <div class="quote-splitter" id="quote-splitter"></div>
 
   <!-- 이미지 시트 섹션 -->
   <div id="imgsheet-section" class="imgsheet-section">
@@ -1110,10 +1116,64 @@ function findNextFreeCell() {
 function toggleImgSheet() {
   const sec = document.getElementById('imgsheet-section');
   const btn = document.getElementById('imgsheet-toggle-btn');
+  const splitter = document.getElementById('quote-splitter');
+  const qb = document.querySelector('.quote-body');
   const open = sec.classList.toggle('open');
   btn.textContent = open ? '이미지 시트 ▲' : '이미지 시트 ▼';
-  if (open) renderImgSheetPages();
+  if (open) {
+    if (splitter) splitter.style.display = 'block';
+    const savedH = localStorage.getItem('quoteBodyHeight');
+    if (savedH) {
+      qb.style.flex = 'none';
+      qb.style.height = savedH + 'px';
+      sec.style.flex = '1';
+      sec.style.maxHeight = '';
+    }
+    renderImgSheetPages();
+  } else {
+    if (splitter) splitter.style.display = 'none';
+    qb.style.flex = '';
+    qb.style.height = '';
+    sec.style.flex = '';
+    sec.style.maxHeight = '';
+  }
 }
+
+// ===== 리사이저 =====
+(function() {
+  let dragging = false, startY = 0, startH = 0;
+  document.addEventListener('DOMContentLoaded', () => {
+    const splitter = document.getElementById('quote-splitter');
+    if (!splitter) return;
+    splitter.addEventListener('mousedown', e => {
+      dragging = true;
+      startY = e.clientY;
+      startH = document.querySelector('.quote-body').getBoundingClientRect().height;
+      splitter.classList.add('dragging');
+      document.body.style.cursor = 'row-resize';
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const qb = document.querySelector('.quote-body');
+      const sec = document.getElementById('imgsheet-section');
+      const container = qb.parentElement;
+      const containerH = container.getBoundingClientRect().height;
+      const newH = Math.max(150, Math.min(startH + (e.clientY - startY), containerH - 205));
+      qb.style.flex = 'none';
+      qb.style.height = newH + 'px';
+      sec.style.flex = '1';
+      sec.style.maxHeight = '';
+      localStorage.setItem('quoteBodyHeight', newH);
+    });
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      document.getElementById('quote-splitter').classList.remove('dragging');
+      document.body.style.cursor = '';
+    });
+  });
+}());
 
 function updateImgSheetLayout(val) {
   imageSheet.layout = val;
@@ -2031,16 +2091,36 @@ async function exportExcel() {
     const cellPxH = iRowH * (4 / 3);
     let iRow = 1;
 
+    const isCapTop = (imageSheet.captionPosition || 'bottom') === 'top';
+    // 각 그리드 행마다 (캡션행 + 이미지행) 또는 (이미지행 + 캡션행) 2행씩 사용
+    const bandRows = 2;
+    // 그리드 행 gr에서 이미지/캡션의 Excel 행 반환 (1-indexed)
+    const imgRowOf  = (startRow, gr) => isCapTop ? startRow + gr * bandRows + 1 : startRow + gr * bandRows;
+    const capRowOf  = (startRow, gr) => isCapTop ? startRow + gr * bandRows     : startRow + gr * bandRows + 1;
+
     for (let p = 0; p < totalPages; p++) {
       const imgStartRow = iRow;
-      for (let r = 0; r < iRows; r++) wsI.getRow(imgStartRow + r).height = iRowH;
-      const capBotRow = imgStartRow + iRows;
+
+      // 행 높이 설정 + 캡션 행 배경 초기화
+      for (let gr = 0; gr < iRows; gr++) {
+        wsI.getRow(imgRowOf(imgStartRow, gr)).height  = iRowH;
+        wsI.getRow(capRowOf(imgStartRow, gr)).height  = capRowH;
+        for (let gc = 0; gc < iCols; gc++) {
+          const cc = wsI.getCell(capRowOf(imgStartRow, gr), gc + 1);
+          cc.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F5F5' } };
+          cc.alignment = { horizontal: 'center', vertical: 'middle' };
+          cc.font      = { name: '맑은 고딕', size: 9, color: { argb: 'FF555555' } };
+          cc.border    = allBorder('thin', 'FFEEEEEE');
+        }
+      }
 
       // 병렬 fetch + 자연 크기 측정 (split 셀 포함)
       const fetchTasks = [];
       for (let ci = 0; ci < perPage; ci++) {
-        const r = Math.floor(ci / iCols);
-        const c = ci % iCols;
+        const gr = Math.floor(ci / iCols);
+        const gc = ci % iCols;
+        const imgExcelRow = imgRowOf(imgStartRow, gr);
+        const capExcelRow = capRowOf(imgStartRow, gr);
         const sKey = `${p}-${ci}`;
         const splitType = (imageSheet.cellSplits || {})[sKey];
         const candidates = splitType
@@ -2053,19 +2133,19 @@ async function exportExcel() {
           if (!img) continue;
           fetchTasks.push(
             fetchImgBase64(img.url).then(async b64 => {
-              if (!b64) return { b64: null, img, r, c, ext: 'jpeg', natW: 1, natH: 1, splitType, splitPos };
+              if (!b64) return { b64: null, img, gr, gc, imgExcelRow, capExcelRow, ext: 'jpeg', natW: 1, natH: 1, splitType, splitPos };
               let ext = 'jpeg';
               if ((img.storagePath||'').match(/\.png$/i) || img.url.includes('png')) ext = 'png';
               else if ((img.storagePath||'').match(/\.gif$/i)) ext = 'gif';
               const size = await getImgNaturalSize(b64, ext);
-              return { b64, img, r, c, ext, ...size, splitType, splitPos };
+              return { b64, img, gr, gc, imgExcelRow, capExcelRow, ext, ...size, splitType, splitPos };
             })
           );
         }
       }
       const fetched = await Promise.all(fetchTasks);
 
-      for (const { b64, img, r, c, ext, natW, natH, splitType, splitPos } of fetched) {
+      for (const { b64, img, gr, gc, imgExcelRow, capExcelRow, ext, natW, natH, splitType, splitPos } of fetched) {
         if (!b64) continue;
         const imgId = wb.addImage({ base64: b64, extension: ext });
 
@@ -2088,26 +2168,22 @@ async function exportExcel() {
         else                       { dispH = availH; dispW = availH * imgRatio; }
         const xOff = offX + pad + (availW - dispW) / 2;
         const yOff = offY + pad + (availH - dispH) / 2;
-        const tlCol = c + xOff / cellPxW;
-        const tlRow = (imgStartRow - 1 + r) + yOff / cellPxH;
+        const tlCol = gc + xOff / cellPxW;
+        const tlRow = (imgExcelRow - 1) + yOff / cellPxH;
 
         wsI.addImage(imgId, {
           tl: { col: tlCol, row: tlRow },
           ext: { width: Math.round(dispW), height: Math.round(dispH) }
         });
 
+        // 캡션 (분할 셀은 첫 번째 sub-slot 캡션 우선)
         if (img.caption) {
-          wsI.getRow(capBotRow + r).height = capRowH;
-          const capCell = wsI.getCell(capBotRow + r, c + 1);
-          capCell.value = img.caption;
-          capCell.alignment = { horizontal: 'center', vertical: 'middle' };
-          capCell.font = { name: '맑은 고딕', size: 9, color: { argb: 'FF555555' } };
-          capCell.border = allBorder('thin', 'FFEEEEEE');
+          const cc = wsI.getCell(capExcelRow, gc + 1);
+          cc.value = img.caption;
         }
       }
-      iRow = imgStartRow + iRows;
-      if (xlsImgs.some(im => im.caption && (im.pageIndex === p || im.pageIndex === undefined))) iRow += iRows;
-      iRow += 2;
+      // 페이지당 bandRows*iRows 행 + 1행 구분선
+      iRow = imgStartRow + iRows * bandRows + 1;
     }
   }
 
@@ -2122,7 +2198,7 @@ async function exportExcel() {
 }
 
 // ===== 인쇄 =====
-function printQuote() {
+async function printQuote() {
   const allItems = getAllItems();
   if (!allItems.length) { alert('견적 항목이 없습니다.'); return; }
   const client = document.getElementById('inp-client').value || '(미입력)';
@@ -2227,21 +2303,29 @@ function printQuote() {
         <th ${S(B+P+'text-align:center;width:120px')}>비고</th>
       </tr>
     </thead>
-    <tbody>${rows}</tbody>
-    <tfoot>
-      <tr style="font-weight:700;background:#f8f9fa">
+    <tbody>${rows}<tr style="font-weight:700;background:#f8f9fa">
         <td ${S(B+P+'text-align:center')} colspan="4">합  계</td>
         <td ${S(B+P+'text-align:right')}>${fmt(sup)}</td>
         <td ${S(B+P+'text-align:right')}>${fmt(tax)}</td>
         <td ${S(B+P)}></td>
-      </tr>
-    </tfoot>
+      </tr></tbody>
   </table>
   <div style="margin-top:16px;padding:10px 14px;background:#f5f5f5;border:1px solid #ddd;font-size:9pt">
     <div style="font-weight:700;margin-bottom:5px">NOTE</div>
     ${noteLines}
   </div>
 </div>${buildImgSheetPrintPages()}`;
+  // 이미지(로고 포함) 로딩 완료 후 인쇄
+  await new Promise(resolve => {
+    const imgs = document.querySelectorAll('#print-area img');
+    if (!imgs.length) return resolve();
+    let done = 0;
+    const total = imgs.length;
+    imgs.forEach(img => {
+      if (img.complete) { if (++done === total) resolve(); }
+      else { img.onload = img.onerror = () => { if (++done === total) resolve(); }; }
+    });
+  });
   window.print();
 }
 
