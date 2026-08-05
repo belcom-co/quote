@@ -1170,7 +1170,7 @@ function toggleImgSheet() {
 
 // ===== 세로 리사이저 =====
 (function() {
-  function makeVResizer(resizerId, getTarget, getMin, getMax) {
+  function makeVResizer(resizerId, getTarget, getMin, getMax, invert) {
     let dragging = false, startX = 0, startW = 0;
     document.addEventListener('DOMContentLoaded', () => {
       const resizer = document.getElementById(resizerId);
@@ -1185,7 +1185,8 @@ function toggleImgSheet() {
       });
       document.addEventListener('mousemove', e => {
         if (!dragging) return;
-        const newW = Math.max(getMin(), Math.min(getMax(), startW + (e.clientX - startX)));
+        const delta = invert ? (startX - e.clientX) : (e.clientX - startX);
+        const newW = Math.max(getMin(), Math.min(getMax(), startW + delta));
         getTarget().style.width = newW + 'px';
         saveLayout();
       });
@@ -1205,11 +1206,12 @@ function toggleImgSheet() {
     () => 400
   );
 
-  // 중↔우 리사이저: 이미지 시트 폭 조절 (400~화면너비-600px)
+  // 중↔우 리사이저: 이미지 시트 폭 조절 (400~화면너비-600px), 방향 반전
   makeVResizer('resizer-right',
     () => document.getElementById('imgsheet-section'),
     () => 400,
-    () => Math.max(400, window.innerWidth - 600)
+    () => Math.max(400, window.innerWidth - 600),
+    true
   );
 }());
 
