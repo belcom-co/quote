@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
-<title>벨콤 견적 시스템</title>
+<title>BELCOM 견적 시스템</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script type="module">
@@ -302,7 +302,7 @@ tr.expense-row:hover td{background:#fff5d6}
 
 <div class="app-header">
   <div>
-    <div class="app-title">㈜벨콤 견적 시스템</div>
+    <div class="app-title">BELCOM 견적 시스템</div>
     <div class="app-subtitle">디자인 · 콘텐츠 · 마케팅 제작</div>
   </div>
   <div class="sync-indicator" id="sync-indicator">
@@ -391,8 +391,8 @@ tr.expense-row:hover td{background:#fff5d6}
           </select>
         </label>
         <span style="font-size:12px;color:#444;display:flex;align-items:center;gap:6px;flex-shrink:0">캡션
-          <label style="gap:3px"><input type="radio" name="is-cap-pos" value="top" onchange="updateImgSheetCaption('top')"> 위</label>
-          <label style="gap:3px"><input type="radio" name="is-cap-pos" value="bottom" checked onchange="updateImgSheetCaption('bottom')"> 아래</label>
+          <label style="gap:3px"><input type="radio" name="is-cap-pos" value="top" checked onchange="updateImgSheetCaption('top')"> 위</label>
+          <label style="gap:3px"><input type="radio" name="is-cap-pos" value="bottom" onchange="updateImgSheetCaption('bottom')"> 아래</label>
         </span>
         <label style="font-size:12px;color:#444;display:flex;align-items:center;gap:4px;flex-shrink:0">엑셀 탭 이름
           <input type="text" id="is-sheet-name" value="이미지 시트" maxlength="31"
@@ -726,7 +726,7 @@ let quoteGroups    = [];   // v2: [{id, name, subLabel, showSubtotal, items}]
 let ungroupedItems = [];   // v1 호환: 그룹 미지정 항목
 let activeGroupId  = null; // 항목 추가 대상 그룹
 // v3: 이미지 시트
-let imageSheet = { layout: '2x2', captionPosition: 'bottom', sheetName: '이미지 시트', pageCount: 1, images: [], cellSplits: {} };
+let imageSheet = { layout: '2x2', captionPosition: 'top', sheetName: '이미지 시트', pageCount: 1, images: [], cellSplits: {} };
 const IS_LAYOUTS = {
   '1x1':{cols:1,rows:1},'1x2':{cols:1,rows:2},'2x1':{cols:2,rows:1},
   '2x2':{cols:2,rows:2},'2x3':{cols:2,rows:3},'3x2':{cols:3,rows:2},'3x3':{cols:3,rows:3}
@@ -1732,7 +1732,7 @@ function syncImgSheetUI() {
 function clearQuote() {
   if (!confirm('견적 내역을 초기화하시겠습니까?')) return;
   quoteGroups=[]; ungroupedItems=[]; activeGroupId=null; editingQuoteId=null;
-  imageSheet = { layout: '2x2', captionPosition: 'bottom', sheetName: '이미지 시트', pageCount: 1, images: [], cellSplits: {} };
+  imageSheet = { layout: '2x2', captionPosition: 'top', sheetName: '이미지 시트', pageCount: 1, images: [], cellSplits: {} };
   document.getElementById('inp-client').value  = '';
   document.getElementById('inp-project').value = '';
   document.getElementById('inp-date').value    = today();
@@ -2646,7 +2646,7 @@ async function deleteQuote(e, id) {
   }
   // 로컬 캐시도 갱신
   saveHistoryLS(loadHistoryLS().filter(h=>h.id!==id));
-  if (editingQuoteId===id) { editingQuoteId=null; imageSheet={layout:'2x2',captionPosition:'bottom',pageCount:1,images:[]}; }
+  if (editingQuoteId===id) { editingQuoteId=null; imageSheet={layout:'2x2',captionPosition:'top',pageCount:1,images:[]}; }
   // onSnapshot이 자동 재렌더
 }
 
