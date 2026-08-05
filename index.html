@@ -2173,8 +2173,9 @@ async function exportExcel() {
         console.log(`[이미지시트] 페이지${p} id:${im.id} ${sz.natW}×${sz.natH} ar:${ar.toFixed(3)} 필요높이:${reqPt.toFixed(1)}pt`);
         if (reqPt > maxRequiredPt) maxRequiredPt = reqPt;
       }
-      const pageRowH = Math.max(DEFAULT_ROW_HEIGHT, Math.round(maxRequiredPt));
-      console.log(`[이미지시트] 페이지${p} 최종 행높이: ${pageRowH}pt (기본${DEFAULT_ROW_HEIGHT}, 필요최대${maxRequiredPt.toFixed(1)}pt)`);
+      const withMargin = Math.ceil(maxRequiredPt * 1.05 + 15);
+      const pageRowH = Math.max(DEFAULT_ROW_HEIGHT, withMargin);
+      console.log(`[이미지시트] 페이지${p} 최종 행높이: ${pageRowH}pt (기본${DEFAULT_ROW_HEIGHT}, 필요최대${maxRequiredPt.toFixed(1)}pt, 마진적용후${withMargin}pt)`);
       const cellPxH = pageRowH * (4 / 3);
 
       // 행 높이 설정 + 캡션 행 배경 초기화
