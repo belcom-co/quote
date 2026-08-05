@@ -266,6 +266,12 @@ tr.expense-row:hover td{background:#fff5d6}
 .is-empty-cell:hover .is-split-btns{opacity:1}
 /* 이미지 셀: 분할 버튼 숨김 */
 .is-cell:not(.is-empty-cell) .is-split-btns{display:none !important}
+/* 페이지 삽입 버튼 */
+.is-insert-row{display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer;opacity:0.35;transition:opacity .15s}
+.is-insert-row:hover{opacity:1}
+.is-insert-line{flex:1;height:1px;background:#aabbd4}
+.is-insert-btn{background:none;border:1px solid #aabbd4;border-radius:3px;padding:2px 12px;font-size:11px;color:#4a6fa5;cursor:pointer;font-family:inherit;white-space:nowrap}
+.is-insert-row:hover .is-insert-btn{background:#e8f0fb;border-color:#4a6fa5;color:#1a3a5c}
 @media print{
   .imgsheet-print-page{page-break-before:always;width:100%;font-family:'맑은 고딕','Malgun Gothic',sans-serif}
   .imgsheet-print-grid{display:grid;width:100%;height:100vh;box-sizing:border-box;padding:12px;gap:8px}
@@ -1121,6 +1127,17 @@ function updateImgSheetCaption(val) {
 }
 
 function addImgSheetPage() {
+  insertImgSheetPage(imageSheet.pageCount || 1);
+}
+
+function insertImgSheetPage(insertBefore) {
+  imageSheet.images.forEach(im => { if (im.pageIndex >= insertBefore) im.pageIndex++; });
+  const newSplits = {};
+  Object.entries(imageSheet.cellSplits || {}).forEach(([key, val]) => {
+    const [pg, ci] = key.split('-').map(Number);
+    newSplits[pg >= insertBefore ? `${pg+1}-${ci}` : key] = val;
+  });
+  imageSheet.cellSplits = newSplits;
   imageSheet.pageCount = (imageSheet.pageCount || 1) + 1;
   renderImgSheetPages();
 }
@@ -1319,23 +1336,18 @@ function imgDragStart(e, p, ci) {
 }
 function imgDragOver(e) {
   e.preventDefault(); e.dataTransfer.dropEffect = 'move';
-  document.querySelectorAll('.is-cell').forEach(c => c.classList.remove('drag-over'));
+  document.querySelectorAll('.is-cell,.is-split-slot').forEach(c => c.classList.remove('drag-over'));
   e.currentTarget.classList.add('drag-over');
 }
 function imgDrop(e, p, ci) {
   e.preventDefault();
   if (!isDragSrc) return;
   const src = isDragSrc; isDragSrc = null;
-  if (src.pageIndex === p && src.cellIndex === ci) { renderImgSheetPages(); return; }
-  const srcImg = getImgAtCell(src.pageIndex, src.cellIndex);
-  const dstImg = getImgAtCell(p, ci);
-  if (srcImg) { srcImg.pageIndex = p; srcImg.cellIndex = ci; }
-  if (dstImg) { dstImg.pageIndex = src.pageIndex; dstImg.cellIndex = src.cellIndex; }
-  renderImgSheetPages();
+  performPush(src.pageIndex, src.cellIndex, src.split ?? null, p, ci, null);
 }
 function imgDragEnd() {
   isDragSrc = null;
-  document.querySelectorAll('.is-cell').forEach(c => c.classList.remove('drag-over'));
+  document.querySelectorAll('.is-cell,.is-split-slot').forEach(c => c.classList.remove('drag-over'));
 }
 
 function imgDragStartSplit(e, p, ci, splitPos) {
@@ -1347,14 +1359,75 @@ function imgDropSplit(e, p, ci, splitPos) {
   e.preventDefault(); e.stopPropagation();
   if (!isDragSrc) return;
   const src = isDragSrc; isDragSrc = null;
-  if (src.pageIndex === p && src.cellIndex === ci && src.split === splitPos) { renderImgSheetPages(); return; }
-  const srcImg = src.split ? getImgAtSubCell(src.pageIndex, src.cellIndex, src.split) : getImgAtCell(src.pageIndex, src.cellIndex);
-  const dstImg = getImgAtSubCell(p, ci, splitPos);
-  if (srcImg) {
-    const oldSplit = srcImg.split;
-    srcImg.pageIndex = p; srcImg.cellIndex = ci; srcImg.split = splitPos;
-    if (dstImg) { dstImg.pageIndex = src.pageIndex; dstImg.cellIndex = src.cellIndex; dstImg.split = oldSplit; }
+  performPush(src.pageIndex, src.cellIndex, src.split ?? null, p, ci, splitPos);
+}
+
+// ===== 슬롯 관리 (밀기 방식 v4) =====
+function getPageSlots(p) {
+  const { cols, rows } = IS_LAYOUTS[imageSheet.layout] || IS_LAYOUTS['2x2'];
+  const perPage = cols * rows;
+  const slots = [];
+  for (let ci = 0; ci < perPage; ci++) {
+    const splitType = (imageSheet.cellSplits || {})[`${p}-${ci}`];
+    if (splitType === 'horizontal') {
+      slots.push({ pageIndex: p, cellIndex: ci, split: 'top' });
+      slots.push({ pageIndex: p, cellIndex: ci, split: 'bottom' });
+    } else if (splitType === 'vertical') {
+      slots.push({ pageIndex: p, cellIndex: ci, split: 'left' });
+      slots.push({ pageIndex: p, cellIndex: ci, split: 'right' });
+    } else {
+      slots.push({ pageIndex: p, cellIndex: ci, split: null });
+    }
   }
+  return slots;
+}
+
+function isPageEmpty(p) {
+  return !imageSheet.images.some(im => im.pageIndex === p);
+}
+
+function getAllSlots() {
+  const slots = [];
+  for (let p = 0; p < (imageSheet.pageCount || 1); p++) {
+    if (!isPageEmpty(p)) slots.push(...getPageSlots(p));
+  }
+  return slots;
+}
+
+function getImgAtSlot(s) {
+  if (s.split) {
+    return imageSheet.images.find(im => im.pageIndex === s.pageIndex && im.cellIndex === s.cellIndex && im.split === s.split) ?? null;
+  }
+  return imageSheet.images.find(im => im.pageIndex === s.pageIndex && im.cellIndex === s.cellIndex && !im.split) ?? null;
+}
+
+function performPush(srcPage, srcCell, srcSplit, dstPage, dstCell, dstSplit) {
+  srcSplit = srcSplit ?? null;
+  dstSplit = dstSplit ?? null;
+  if (srcPage === dstPage && srcCell === dstCell && srcSplit === dstSplit) return;
+  const srcImg = srcSplit ? getImgAtSubCell(srcPage, srcCell, srcSplit) : getImgAtCell(srcPage, srcCell);
+  if (!srcImg) return;
+  // 완전히 빈 페이지로 이동: 단순 이동
+  if (dstPage !== srcPage && isPageEmpty(dstPage)) {
+    srcImg.pageIndex = dstPage;
+    srcImg.cellIndex = dstCell;
+    srcImg.split = dstSplit;
+    renderImgSheetPages();
+    return;
+  }
+  const slots = getAllSlots();
+  const srcIdx = slots.findIndex(s => s.pageIndex === srcPage && s.cellIndex === srcCell && s.split === srcSplit);
+  const dstIdx = slots.findIndex(s => s.pageIndex === dstPage && s.cellIndex === dstCell && s.split === dstSplit);
+  if (srcIdx < 0 || dstIdx < 0) return;
+  const contents = slots.map(s => getImgAtSlot(s));
+  const [moved] = contents.splice(srcIdx, 1);
+  contents.splice(dstIdx, 0, moved);
+  contents.forEach((img, i) => {
+    if (!img) return;
+    img.pageIndex = slots[i].pageIndex;
+    img.cellIndex = slots[i].cellIndex;
+    img.split = slots[i].split;
+  });
   renderImgSheetPages();
 }
 
@@ -1410,7 +1483,9 @@ function renderImgSheetPages() {
   const { cols, rows } = IS_LAYOUTS[imageSheet.layout] || IS_LAYOUTS['2x2'];
   const perPage = cols * rows;
   const pageCount = imageSheet.pageCount || 1;
-  let html = '';
+  const insertBtnHtml = (pos) =>
+    `<div class="is-insert-row" onclick="insertImgSheetPage(${pos})"><div class="is-insert-line"></div><button class="is-insert-btn">+ 여기에 페이지 추가</button><div class="is-insert-line"></div></div>`;
+  let html = insertBtnHtml(0);
   for (let p = 0; p < pageCount; p++) {
     let cells = '';
     for (let ci = 0; ci < perPage; ci++) {
@@ -1453,10 +1528,8 @@ function renderImgSheetPages() {
       </div>
       <div class="is-grid" style="grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr)">${cells}</div>
     </div>`;
+    html += insertBtnHtml(p + 1);
   }
-  html += `<div style="text-align:center;padding:8px">
-    <button class="btn btn-secondary btn-sm" onclick="addImgSheetPage()">+ 페이지 추가</button>
-  </div>`;
   container.innerHTML = html;
   // 렌더 후 활성 셀 강조 복원
   if (activeCell) {
