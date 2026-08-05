@@ -2100,9 +2100,8 @@ async function exportExcel() {
     const capRowH = 28;
     const marRowH = 6;
     const totalPages = imageSheet.pageCount || Math.ceil(xlsImgs.length / perPage) || 1;
-    // 셀 픽셀 크기 (비율 계산용): 1ch ≈ 7px, 1pt = 4/3px — 행 높이는 페이지별 계산
+    // 셀 픽셀 폭 (비율 계산용): 1ch ≈ 7px
     const cellPxW = iColW * 7;
-    const DEFAULT_ROW_HEIGHT = 347;
 
     // 이미지 원본 크기 사전 로드 (URL 기반, 브라우저 캐시 활용)
     const imgSizeCache = {};
@@ -2159,28 +2158,12 @@ async function exportExcel() {
       }
       const fetched = await Promise.all(fetchTasks);
 
-      // 페이지별 이미지 행 높이 계산 (기본 347, 세로 긴 이미지 시 자동 확장)
-      let maxRequiredPt = 0;
-      const pageXlsImgs = xlsImgs.filter(im => im.pageIndex === p);
-      for (const im of pageXlsImgs) {
-        const sz = imgSizeCache[im.id];
-        if (!sz || sz.natW <= 1 || sz.natH <= 1) {
-          console.log(`[이미지시트] 페이지${p} id:${im.id} 크기 획득 실패 → 폴백 347`);
-          continue;
-        }
-        const ar = sz.natW / sz.natH;
-        const reqPt = (cellPxW / ar) * 0.75;
-        console.log(`[이미지시트] 페이지${p} id:${im.id} ${sz.natW}×${sz.natH} ar:${ar.toFixed(3)} 필요높이:${reqPt.toFixed(1)}pt`);
-        if (reqPt > maxRequiredPt) maxRequiredPt = reqPt;
-      }
-      const withMargin = Math.ceil(maxRequiredPt * 1.05 + 15);
-      const pageRowH = Math.max(DEFAULT_ROW_HEIGHT, withMargin);
-      console.log(`[이미지시트] 페이지${p} 최종 행높이: ${pageRowH}pt (기본${DEFAULT_ROW_HEIGHT}, 필요최대${maxRequiredPt.toFixed(1)}pt, 마진적용후${withMargin}pt)`);
-      const cellPxH = pageRowH * (4 / 3);
+      // 셀 크기 고정 (347pt) — 이미지를 셀 안에 맞춰 중앙 배치
+      const cellPxH = 347 * (4 / 3);
 
       // 행 높이 설정 + 캡션 행 배경 초기화
       for (let gr = 0; gr < iRows; gr++) {
-        wsI.getRow(imgRowOf(imgStartRow, gr)).height  = pageRowH;
+        wsI.getRow(imgRowOf(imgStartRow, gr)).height  = 347;
         wsI.getRow(capRowOf(imgStartRow, gr)).height  = capRowH;
         wsI.getRow(mar1RowOf(imgStartRow, gr)).height = marRowH;
         wsI.getRow(mar2RowOf(imgStartRow, gr)).height = marRowH;
@@ -2193,8 +2176,12 @@ async function exportExcel() {
         }
       }
 
-      for (const { b64, img, gr, gc, imgExcelRow, capExcelRow, ext, natW, natH, splitType, splitPos } of fetched) {
+      for (const { b64, img, gr, gc, imgExcelRow, capExcelRow, ext, natW: rawNatW, natH: rawNatH, splitType, splitPos } of fetched) {
         if (!b64) continue;
+        // imgSizeCache(URL 기반) 우선, 폴백은 base64 측정값
+        const sz = imgSizeCache[img.id];
+        const natW = (sz && sz.natW > 1) ? sz.natW : (rawNatW > 1 ? rawNatW : 1);
+        const natH = (sz && sz.natH > 1) ? sz.natH : (rawNatH > 1 ? rawNatH : 1);
         const imgId = wb.addImage({ base64: b64, extension: ext });
 
         // sub-area 계산 (분할 시 절반 영역)
@@ -2207,16 +2194,18 @@ async function exportExcel() {
           if (splitPos === 'right') offX = cellPxW / 2;
         }
 
-        // contain-fit: 원본 비율 유지, 가로 중앙 + 세로 상단 정렬
+        // contain-fit: 원본 비율 유지, 상하좌우 중앙 정렬
         const availW = subW, availH = subH;
         const imgRatio = natW / natH, cellRatio = availW / availH;
         let dispW, dispH;
         if (imgRatio > cellRatio) { dispW = availW; dispH = availW / imgRatio; }
         else                       { dispH = availH; dispW = availH * imgRatio; }
         const xOff = offX + (availW - dispW) / 2;
-        const yOff = offY;
+        const yOff = offY + (availH - dispH) / 2;
         const tlCol = gc + xOff / cellPxW;
         const tlRow = (imgExcelRow - 1) + yOff / cellPxH;
+
+        console.log(`[이미지시트] ${img.id}: 원본${natW}×${natH} ar:${(natW/natH).toFixed(3)} → 표시${Math.round(dispW)}×${Math.round(dispH)} 오프셋(${Math.round(xOff)},${Math.round(yOff)})px`);
 
         wsI.addImage(imgId, {
           tl: { col: tlCol, row: tlRow },
