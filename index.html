@@ -1847,7 +1847,7 @@ async function exportExcel() {
   const wb = new ExcelJS.Workbook();
   wb.creator = '벨콤 견적 시스템';
   const ws = wb.addWorksheet('견적서');
-  ws.columns = [{width:6},{width:36},{width:10},{width:14},{width:15},{width:13},{width:28}];
+  ws.columns = [{width:8},{width:36},{width:10},{width:14},{width:15},{width:13},{width:28}];
 
   // 공통 헬퍼
   const cell = (addr) => ws.getCell(addr);
@@ -2098,7 +2098,7 @@ async function exportExcel() {
     const iColW = Math.max(10, Math.round(92 / iCols));
     for (let c = 1; c <= iCols; c++) wsI.getColumn(c).width = iColW;
     // A4 여백 포함 실사용 높이 ≈ 972px → 각 행 높이(pt, 1pt = 4/3px)
-    const iRowH = Math.max(80, Math.round((972 / iRows) * 0.75));
+    const iRowH = 315;
     const capRowH = 28;
     const marRowH = 6;
     const totalPages = imageSheet.pageCount || Math.ceil(xlsImgs.length / perPage) || 1;
@@ -2178,15 +2178,14 @@ async function exportExcel() {
           if (splitPos === 'right') offX = cellPxW / 2;
         }
 
-        // contain-fit: 원본 비율 유지하며 sub-area 안에 중앙 배치
-        const pad = Math.min(subW, subH) * 0.04;
-        const availW = subW - 2*pad, availH = subH - 2*pad;
+        // contain-fit: 원본 비율 유지, 가로 중앙 + 세로 상단 정렬
+        const availW = subW, availH = subH;
         const imgRatio = natW / natH, cellRatio = availW / availH;
         let dispW, dispH;
         if (imgRatio > cellRatio) { dispW = availW; dispH = availW / imgRatio; }
         else                       { dispH = availH; dispW = availH * imgRatio; }
-        const xOff = offX + pad + (availW - dispW) / 2;
-        const yOff = offY + pad + (availH - dispH) / 2;
+        const xOff = offX + (availW - dispW) / 2;
+        const yOff = offY;
         const tlCol = gc + xOff / cellPxW;
         const tlRow = (imgExcelRow - 1) + yOff / cellPxH;
 
