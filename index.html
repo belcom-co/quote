@@ -2209,7 +2209,11 @@ async function exportExcel() {
         const tlCol = gc + colOffRatio;
         const tlRow = (imgExcelRow - 1) + rowOffRatio;
 
-        console.log(`[이미지시트] ${img.id}: 이미지 ${Math.round(finalW)}×${Math.round(finalH)}px 오프셋(px): 좌${colOffPx.toFixed(1)} 상${rowOffPx.toFixed(1)} 오프셋(비율): col+${colOffRatio.toFixed(3)} row+${rowOffRatio.toFixed(3)} tl(${tlCol.toFixed(3)},${tlRow.toFixed(3)})`);
+        console.log(`[이미지시트] ${img.id}: 원본${natW}x${natH} ar:${(natW/natH).toFixed(3)}`);
+        console.log(`  이미지: ${Math.round(finalW)}x${Math.round(finalH)}px`);
+        console.log(`  오프셋(px): 좌${colOffPx.toFixed(1)}, 상${rowOffPx.toFixed(1)}`);
+        console.log(`  비율: col+${colOffRatio.toFixed(4)}, row+${rowOffRatio.toFixed(4)}`);
+        console.log(`  ★tl 최종: col=${tlCol.toFixed(4)}, row=${tlRow.toFixed(4)}`);
 
         wsI.addImage(imgId, {
           tl: { col: tlCol, row: tlRow },
