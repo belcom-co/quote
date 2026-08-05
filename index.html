@@ -2194,18 +2194,19 @@ async function exportExcel() {
           if (splitPos === 'right') offX = cellPxW / 2;
         }
 
-        // contain-fit: 원본 비율 유지, 상하좌우 중앙 정렬
-        const availW = subW, availH = subH;
-        const imgRatio = natW / natH, cellRatio = availW / availH;
+        // contain-fit: 원본 비율 유지, 셀 90% 안에 맞추고 상하좌우 중앙 정렬
+        const SAFE = 0.90;
+        const fitW = subW * SAFE, fitH = subH * SAFE;
+        const imgRatio = natW / natH, fitRatio = fitW / fitH;
         let dispW, dispH;
-        if (imgRatio > cellRatio) { dispW = availW; dispH = availW / imgRatio; }
-        else                       { dispH = availH; dispW = availH * imgRatio; }
-        const xOff = offX + (availW - dispW) / 2;
-        const yOff = offY + (availH - dispH) / 2;
+        if (imgRatio > fitRatio) { dispW = fitW; dispH = fitW / imgRatio; }
+        else                      { dispH = fitH; dispW = fitH * imgRatio; }
+        const xOff = offX + (subW - dispW) / 2;
+        const yOff = offY + (subH - dispH) / 2;
         const tlCol = gc + xOff / cellPxW;
         const tlRow = (imgExcelRow - 1) + yOff / cellPxH;
 
-        console.log(`[이미지시트] ${img.id}: 원본${natW}×${natH} ar:${(natW/natH).toFixed(3)} → 표시${Math.round(dispW)}×${Math.round(dispH)} 오프셋(${Math.round(xOff)},${Math.round(yOff)})px`);
+        console.log(`[이미지시트] ${img.id}: 원본${natW}×${natH} ar:${(natW/natH).toFixed(3)} 최대${Math.round(fitW)}×${Math.round(fitH)}(90%) → 표시${Math.round(dispW)}×${Math.round(dispH)} 오프셋(${Math.round(xOff)},${Math.round(yOff)})px`);
 
         wsI.addImage(imgId, {
           tl: { col: tlCol, row: tlRow },
