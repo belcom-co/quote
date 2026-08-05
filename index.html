@@ -396,6 +396,12 @@ tr.expense-row:hover td{background:#fff5d6}
         <label style="gap:3px"><input type="radio" name="is-cap-pos" value="top" onchange="updateImgSheetCaption('top')"> 위</label>
         <label style="gap:3px"><input type="radio" name="is-cap-pos" value="bottom" checked onchange="updateImgSheetCaption('bottom')"> 아래</label>
       </span>
+      <label style="font-size:12px;color:#444;display:flex;align-items:center;gap:4px;flex-shrink:0">엑셀 탭 이름
+        <input type="text" id="is-sheet-name" value="이미지 시트" maxlength="31"
+          style="width:110px;padding:2px 5px;border:1px solid #b0bee0;border-radius:3px;font-size:12px;font-family:inherit"
+          oninput="updateImgSheetName(this.value)"
+          onblur="this.value=imageSheet.sheetName||'이미지 시트'">
+      </label>
       <label class="btn btn-secondary btn-sm" style="cursor:pointer;flex-shrink:0">이미지 추가
         <input type="file" accept="image/*" multiple style="display:none" onchange="handleImgSheetFiles(this.files);this.value=''">
       </label>
@@ -721,7 +727,7 @@ let quoteGroups    = [];   // v2: [{id, name, subLabel, showSubtotal, items}]
 let ungroupedItems = [];   // v1 호환: 그룹 미지정 항목
 let activeGroupId  = null; // 항목 추가 대상 그룹
 // v3: 이미지 시트
-let imageSheet = { layout: '2x2', captionPosition: 'bottom', pageCount: 1, images: [], cellSplits: {} };
+let imageSheet = { layout: '2x2', captionPosition: 'bottom', sheetName: '이미지 시트', pageCount: 1, images: [], cellSplits: {} };
 const IS_LAYOUTS = {
   '1x1':{cols:1,rows:1},'1x2':{cols:1,rows:2},'2x1':{cols:2,rows:1},
   '2x2':{cols:2,rows:2},'2x3':{cols:2,rows:3},'3x2':{cols:3,rows:2},'3x3':{cols:3,rows:3}
@@ -1184,6 +1190,13 @@ function updateImgSheetLayout(val) {
 function updateImgSheetCaption(val) {
   imageSheet.captionPosition = val;
   renderImgSheetPages();
+}
+
+function sanitizeSheetName(name) {
+  return (name||'').trim().replace(/[\\\/\?\*\[\]:]/g,'').slice(0,31) || '이미지 시트';
+}
+function updateImgSheetName(val) {
+  imageSheet.sheetName = sanitizeSheetName(val);
 }
 
 function addImgSheetPage() {
@@ -1678,12 +1691,14 @@ function syncImgSheetUI() {
   if (sel) sel.value = imageSheet.layout;
   const radios = document.querySelectorAll('input[name="is-cap-pos"]');
   radios.forEach(r => { r.checked = (r.value === imageSheet.captionPosition); });
+  const nameInp = document.getElementById('is-sheet-name');
+  if (nameInp) nameInp.value = imageSheet.sheetName || '이미지 시트';
 }
 
 function clearQuote() {
   if (!confirm('견적 내역을 초기화하시겠습니까?')) return;
   quoteGroups=[]; ungroupedItems=[]; activeGroupId=null; editingQuoteId=null;
-  imageSheet = { layout: '2x2', captionPosition: 'bottom', pageCount: 1, images: [], cellSplits: {} };
+  imageSheet = { layout: '2x2', captionPosition: 'bottom', sheetName: '이미지 시트', pageCount: 1, images: [], cellSplits: {} };
   document.getElementById('inp-client').value  = '';
   document.getElementById('inp-project').value = '';
   document.getElementById('inp-date').value    = today();
@@ -1788,7 +1803,7 @@ async function saveQuote() {
     version: 3,
     groups:  clone(quoteGroups),
     ungroupedItems: clone(ungroupedItems),
-    imageSheet: { layout: imageSheet.layout, captionPosition: imageSheet.captionPosition, pageCount: imageSheet.pageCount||1, images: savedImages, cellSplits: imageSheet.cellSplits || {} },
+    imageSheet: { layout: imageSheet.layout, captionPosition: imageSheet.captionPosition, sheetName: imageSheet.sheetName||'이미지 시트', pageCount: imageSheet.pageCount||1, images: savedImages, cellSplits: imageSheet.cellSplits || {} },
     supply: sup, tax, total: sup+tax,
     savedAt: new Date().toISOString()
   };
@@ -1853,7 +1868,7 @@ async function exportExcel() {
   merge('A1:B4');
   if (logoBase64) {
     const imgId = wb.addImage({base64:logoBase64, extension:'jpeg'});
-    ws.addImage(imgId, {tl:{col:0,row:0}, ext:{width:170, height:72}});
+    ws.addImage(imgId, {tl:{col:0,row:0}, ext:{width:90, height:90}, editAs:'oneCell'});
   } else {
     const lc = cell('A1');
     lc.value = '벨콤비즈니스';
@@ -2078,13 +2093,14 @@ async function exportExcel() {
   if (xlsImgs.length > 0) {
     const { cols: iCols, rows: iRows } = IS_LAYOUTS[imageSheet.layout] || IS_LAYOUTS['2x2'];
     const perPage = iCols * iRows;
-    const wsI = wb.addWorksheet('이미지 시트');
+    const wsI = wb.addWorksheet(sanitizeSheetName(imageSheet.sheetName || '이미지 시트'));
     // A4 여백 포함 실사용 폭 ≈ 643px → 각 열 너비(chars, 1ch ≈ 7px)
     const iColW = Math.max(10, Math.round(92 / iCols));
     for (let c = 1; c <= iCols; c++) wsI.getColumn(c).width = iColW;
     // A4 여백 포함 실사용 높이 ≈ 972px → 각 행 높이(pt, 1pt = 4/3px)
     const iRowH = Math.max(80, Math.round((972 / iRows) * 0.75));
-    const capRowH = 18;
+    const capRowH = 28;
+    const marRowH = 6;
     const totalPages = imageSheet.pageCount || Math.ceil(xlsImgs.length / perPage) || 1;
     // 셀 픽셀 크기 (비율 계산용): 1ch ≈ 7px, 1pt = 4/3px
     const cellPxW = iColW * 7;
@@ -2092,11 +2108,12 @@ async function exportExcel() {
     let iRow = 1;
 
     const isCapTop = (imageSheet.captionPosition || 'bottom') === 'top';
-    // 각 그리드 행마다 (캡션행 + 이미지행) 또는 (이미지행 + 캡션행) 2행씩 사용
-    const bandRows = 2;
-    // 그리드 행 gr에서 이미지/캡션의 Excel 행 반환 (1-indexed)
-    const imgRowOf  = (startRow, gr) => isCapTop ? startRow + gr * bandRows + 1 : startRow + gr * bandRows;
-    const capRowOf  = (startRow, gr) => isCapTop ? startRow + gr * bandRows     : startRow + gr * bandRows + 1;
+    // 각 그리드 행마다 (캡션+여백+이미지+여백) 또는 (이미지+여백+캡션+여백) 4행씩 사용
+    const bandRows  = 4;
+    const imgRowOf  = (startRow, gr) => isCapTop ? startRow + gr * bandRows + 2 : startRow + gr * bandRows;
+    const capRowOf  = (startRow, gr) => isCapTop ? startRow + gr * bandRows     : startRow + gr * bandRows + 2;
+    const mar1RowOf = (startRow, gr) => startRow + gr * bandRows + 1;
+    const mar2RowOf = (startRow, gr) => startRow + gr * bandRows + 3;
 
     for (let p = 0; p < totalPages; p++) {
       const imgStartRow = iRow;
@@ -2105,6 +2122,8 @@ async function exportExcel() {
       for (let gr = 0; gr < iRows; gr++) {
         wsI.getRow(imgRowOf(imgStartRow, gr)).height  = iRowH;
         wsI.getRow(capRowOf(imgStartRow, gr)).height  = capRowH;
+        wsI.getRow(mar1RowOf(imgStartRow, gr)).height = marRowH;
+        wsI.getRow(mar2RowOf(imgStartRow, gr)).height = marRowH;
         for (let gc = 0; gc < iCols; gc++) {
           const cc = wsI.getCell(capRowOf(imgStartRow, gr), gc + 1);
           cc.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F5F5' } };
@@ -2173,7 +2192,8 @@ async function exportExcel() {
 
         wsI.addImage(imgId, {
           tl: { col: tlCol, row: tlRow },
-          ext: { width: Math.round(dispW), height: Math.round(dispH) }
+          ext: { width: Math.round(dispW), height: Math.round(dispH) },
+          editAs: 'oneCell'
         });
 
         // 캡션 (분할 셀은 첫 번째 sub-slot 캡션 우선)
@@ -2545,10 +2565,10 @@ function loadQuote(id) {
   }
   // v3: 이미지 시트 복원
   if (entry.version >= 3 && entry.imageSheet) {
-    imageSheet = { layout: entry.imageSheet.layout||'2x2', captionPosition: entry.imageSheet.captionPosition||'bottom', pageCount: entry.imageSheet.pageCount||1, images: clone(entry.imageSheet.images||[]), cellSplits: clone(entry.imageSheet.cellSplits || {}) };
+    imageSheet = { layout: entry.imageSheet.layout||'2x2', captionPosition: entry.imageSheet.captionPosition||'bottom', sheetName: entry.imageSheet.sheetName||'이미지 시트', pageCount: entry.imageSheet.pageCount||1, images: clone(entry.imageSheet.images||[]), cellSplits: clone(entry.imageSheet.cellSplits || {}) };
     migrateImgSheet(imageSheet); // pageIndex/cellIndex/split 없는 구 데이터 마이그레이션
   } else {
-    imageSheet = { layout: '2x2', captionPosition: 'bottom', pageCount: 1, images: [], cellSplits: {} };
+    imageSheet = { layout: '2x2', captionPosition: 'bottom', sheetName: '이미지 시트', pageCount: 1, images: [], cellSplits: {} };
   }
   activeGroupId  = quoteGroups.length ? quoteGroups[0].id : null;
   editingQuoteId = entry.id;
