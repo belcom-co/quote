@@ -2184,36 +2184,30 @@ async function exportExcel() {
         const natH = (sz && sz.natH > 1) ? sz.natH : (rawNatH > 1 ? rawNatH : 1);
         const imgId = wb.addImage({ base64: b64, extension: ext });
 
-        // 분할 셀 sub-area 계산
+        // 분할 셀: 최대 크기 및 sub-area 시작 위치
         let maxW = MAX_IMG_W, maxH = MAX_IMG_H;
-        let subW = CELL_W_PX, subH = CELL_H_PX, offXpx = 0, offYpx = 0;
+        let offXpx = 0, offYpx = 0;
         if (splitType === 'horizontal') {
-          subH = CELL_H_PX / 2; maxH = MAX_IMG_H / 2;
+          maxH = MAX_IMG_H / 2;
           if (splitPos === 'bottom') offYpx = CELL_H_PX / 2;
         } else if (splitType === 'vertical') {
-          subW = CELL_W_PX / 2; maxW = MAX_IMG_W / 2;
+          maxW = MAX_IMG_W / 2;
           if (splitPos === 'right') offXpx = CELL_W_PX / 2;
         }
 
-        // contain-fit: 원본 비율 유지, 하드코딩된 MAX 안에 맞추기
+        // contain-fit: 원본 비율 유지, MAX 안에 맞추기
         const imgRatio = natW / natH, maxRatio = maxW / maxH;
         let finalW, finalH;
         if (imgRatio > maxRatio) { finalW = maxW; finalH = maxW / imgRatio; }
         else                      { finalH = maxH; finalW = maxH * imgRatio; }
 
-        // 중앙 정렬 → tl 소수점 방식 (ExcelJS v4.4.0 지원)
-        const colOffPx    = offXpx + (subW - finalW) / 2;
-        const rowOffPx    = offYpx + (subH - finalH) / 2;
-        const colOffRatio = colOffPx / CELL_W_PX;
-        const rowOffRatio = rowOffPx / CELL_H_PX;
-        const tlCol = gc + colOffRatio;
-        const tlRow = (imgExcelRow - 1) + rowOffRatio;
+        // 좌상단 정렬 (sub-area 시작 위치만 반영)
+        const tlCol = gc + offXpx / CELL_W_PX;
+        const tlRow = (imgExcelRow - 1) + offYpx / CELL_H_PX;
 
         console.log(`[이미지시트] ${img.id}: 원본${natW}x${natH} ar:${(natW/natH).toFixed(3)}`);
-        console.log(`  이미지: ${Math.round(finalW)}x${Math.round(finalH)}px`);
-        console.log(`  오프셋(px): 좌${colOffPx.toFixed(1)}, 상${rowOffPx.toFixed(1)}`);
-        console.log(`  비율: col+${colOffRatio.toFixed(4)}, row+${rowOffRatio.toFixed(4)}`);
-        console.log(`  ★tl 최종: col=${tlCol.toFixed(4)}, row=${tlRow.toFixed(4)}`);
+        console.log(`  이미지 크기: ${Math.round(finalW)}x${Math.round(finalH)}px`);
+        console.log(`  위치: col=${tlCol}, row=${tlRow} (좌상단 정렬)`);
 
         wsI.addImage(imgId, {
           tl: { col: tlCol, row: tlRow },
