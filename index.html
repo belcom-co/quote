@@ -11,7 +11,7 @@
   // Firebase Modular SDK v10.14.1 (named database 지원: v10.7.0+)
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
   import {
-    getFirestore, collection, doc, getDocs, setDoc, deleteDoc,
+    getFirestore, collection, doc, getDocs, setDoc, updateDoc, deleteDoc,
     onSnapshot, orderBy, query, writeBatch
   } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
   import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject, listAll }
@@ -34,7 +34,7 @@
   // 일반 inline script에서 사용할 수 있도록 window에 노출
   window.fbDb  = db;
   window.fbStorage  = storage;
-  window.fbFS  = { collection, doc, getDocs, setDoc, deleteDoc, onSnapshot, orderBy, query, writeBatch };
+  window.fbFS  = { collection, doc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, orderBy, query, writeBatch };
   window.fbStorageFS = { ref, uploadBytesResumable, getDownloadURL, deleteObject, listAll };
   window.dispatchEvent(new Event('firebase-ready'));
   console.log('[Firebase] 초기화 완료 — database: "belcom"');
@@ -141,6 +141,21 @@ tbody tr:hover td{background:#fafbfd}
 .h-project{font-size:12px;color:#666;margin-top:2px}
 .h-date{font-size:11px;color:#999;margin-top:2px}
 .history-amount{font-size:15px;font-weight:700;color:#c0392b;white-space:nowrap}
+/* 세금계산서 */
+.history-tax{display:flex;flex-direction:column;gap:4px;align-items:flex-start;min-width:150px;padding:0 8px;border-left:1px solid #e8ecf2;border-right:1px solid #e8ecf2}
+.history-tax label{display:flex;align-items:center;gap:5px;font-size:11px;color:#555;cursor:pointer;user-select:none;white-space:nowrap}
+.history-tax input[type=checkbox]{cursor:pointer;width:14px;height:14px;accent-color:#2a7a3a}
+.history-tax input[type=date]{font-size:11px;font-family:inherit;padding:2px 4px;border:1px solid #cdd2da;border-radius:3px;width:132px}
+.history-tax input[type=date]:disabled{background:#f0f0f0;color:#999;cursor:not-allowed}
+.history-tax .tax-status-unissued{color:#c0392b;font-weight:600}
+.history-tax .tax-status-issued{color:#2a7a3a;font-weight:600}
+.history-item.tax-issued{background:#eef9ee;border-color:#c6e5c6}
+.history-item.tax-issued:hover{background:#e2f3e2;border-color:#2a7a3a}
+.history-item.tax-unissued{background:#fff5f0;border-color:#f0d2c0}
+.history-item.tax-unissued:hover{background:#ffe8d8;border-color:#d08a4a}
+.history-filter-btn{padding:5px 12px;border:1px solid #cdd2da;background:#fff;border-radius:4px;cursor:pointer;font-size:12px;font-family:inherit;color:#555;transition:all .15s}
+.history-filter-btn:hover{background:#f0f4ff;border-color:#1a3a5c;color:#1a3a5c}
+.history-filter-btn.active{background:#1a3a5c;color:#fff;border-color:#1a3a5c}
 /* Table borders */
 #quote-table th,#quote-table td,.price-table th,.price-table td,.group-qtable th,.group-qtable td{border:1px solid #d2d7e2}
 #quote-table th,.price-table th,.group-qtable th{border-bottom:2px solid #b0b8cc;background:#eceff5}
@@ -433,6 +448,8 @@ tr.expense-row:hover td{background:#fff5d6}
 <div id="tab-history" class="tab-content">
   <div class="history-toolbar">
     <h2>견적 이력</h2>
+    <button class="history-filter-btn active" id="hf-all" onclick="setTaxFilter('all')">전체 보기</button>
+    <button class="history-filter-btn" id="hf-unissued" onclick="setTaxFilter('unissued')">미발행만 보기</button>
   </div>
   <div class="history-list" id="history-list"></div>
 </div>
@@ -651,6 +668,7 @@ function fsCollection(name) {
       return {
         _ref: docRef,
         set(data) { return fbFS.setDoc(docRef, data); },
+        update(data) { return fbFS.updateDoc(docRef, data); },
         delete() { return fbFS.deleteDoc(docRef); }
       };
     },
@@ -2586,19 +2604,107 @@ function importPriceExcel(e) {
 }
 
 // ===== 탭3: 견적 이력 =====
+const LS_TAX_FILTER = 'belcom_tax_filter_v1';
+function getTaxFilter() {
+  const v = localStorage.getItem(LS_TAX_FILTER);
+  return v === 'unissued' ? 'unissued' : 'all';
+}
+function setTaxFilter(mode) {
+  localStorage.setItem(LS_TAX_FILTER, mode);
+  const allBtn = document.getElementById('hf-all');
+  const unBtn  = document.getElementById('hf-unissued');
+  if (allBtn && unBtn) {
+    allBtn.classList.toggle('active', mode === 'all');
+    unBtn.classList.toggle('active', mode === 'unissued');
+  }
+  renderHistory();
+}
+
 function renderHistory() {
   const el = document.getElementById('history-list');
+  const filter = getTaxFilter();
+  const allBtn = document.getElementById('hf-all');
+  const unBtn  = document.getElementById('hf-unissued');
+  if (allBtn && unBtn) {
+    allBtn.classList.toggle('active', filter === 'all');
+    unBtn.classList.toggle('active', filter === 'unissued');
+  }
   if (!quoteHistory.length) { el.innerHTML='<div class="empty-msg">저장된 견적이 없습니다.</div>'; return; }
-  el.innerHTML = quoteHistory.map(h=>`
-    <div class="history-item" onclick="loadQuote('${h.id}')">
+  const list = filter === 'unissued'
+    ? quoteHistory.filter(h => !h.taxInvoiceIssued)
+    : quoteHistory;
+  if (!list.length) { el.innerHTML='<div class="empty-msg">미발행 견적이 없습니다.</div>'; return; }
+  el.innerHTML = list.map(h=>{
+    const issued = !!h.taxInvoiceIssued;
+    const issuedDate = h.taxInvoiceIssuedDate || '';
+    const rowCls = issued ? 'tax-issued' : 'tax-unissued';
+    const statusCls = issued ? 'tax-status-issued' : 'tax-status-unissued';
+    const statusTxt = issued ? '발행' : '미발행';
+    return `
+    <div class="history-item ${rowCls}" onclick="loadQuote('${h.id}')">
       <div class="history-meta">
         <div class="h-client">${esc(h.client)}</div>
         <div class="h-project">${esc(h.project||'(프로젝트명 없음)')}</div>
         <div class="h-date">${h.date} · 저장: ${(h.savedAt||'').substring(0,10)}</div>
       </div>
       <div class="history-amount">${fmt(h.total)}원</div>
+      <div class="history-tax" onclick="event.stopPropagation()">
+        <label>
+          <input type="checkbox" ${issued?'checked':''} onchange="onTaxInvoiceToggle(event,'${h.id}')">
+          <span class="${statusCls}">세금계산서 ${statusTxt}</span>
+        </label>
+        <input type="date" value="${esc(issuedDate)}" ${issued?'':'disabled'} onchange="onTaxInvoiceDateChange(event,'${h.id}')">
+      </div>
       <button class="btn btn-danger btn-sm" onclick="deleteQuote(event,'${h.id}')">삭제</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+}
+
+async function onTaxInvoiceToggle(e, id) {
+  e.stopPropagation();
+  const cb = e.target;
+  const checked = cb.checked;
+  if (!checked) {
+    const ok = confirm('세금계산서 발행 체크를 해제하시겠습니까?\n발행일자도 함께 삭제됩니다.');
+    if (!ok) { cb.checked = true; return; }
+  }
+  const payload = checked
+    ? { taxInvoiceIssued: true,  taxInvoiceIssuedDate: today() }
+    : { taxInvoiceIssued: false, taxInvoiceIssuedDate: null };
+  const entry = quoteHistory.find(h => h.id === id);
+  if (entry) { entry.taxInvoiceIssued = payload.taxInvoiceIssued; entry.taxInvoiceIssuedDate = payload.taxInvoiceIssuedDate; }
+  setSyncStatus('syncing');
+  try {
+    await fsCollection('quotes').doc(id).update(payload);
+    setSyncStatus('ok');
+  } catch(err) {
+    console.error('Tax invoice update error:', err);
+    setSyncStatus('error', '저장 실패');
+  }
+  // 로컬 캐시 반영
+  const hist = loadHistoryLS();
+  const idx = hist.findIndex(h => h.id === id);
+  if (idx >= 0) { hist[idx].taxInvoiceIssued = payload.taxInvoiceIssued; hist[idx].taxInvoiceIssuedDate = payload.taxInvoiceIssuedDate; saveHistoryLS(hist); }
+  renderHistory();
+}
+
+async function onTaxInvoiceDateChange(e, id) {
+  e.stopPropagation();
+  const dateStr = e.target.value;
+  if (!dateStr) return;
+  const entry = quoteHistory.find(h => h.id === id);
+  if (entry) entry.taxInvoiceIssuedDate = dateStr;
+  setSyncStatus('syncing');
+  try {
+    await fsCollection('quotes').doc(id).update({ taxInvoiceIssuedDate: dateStr });
+    setSyncStatus('ok');
+  } catch(err) {
+    console.error('Tax invoice date update error:', err);
+    setSyncStatus('error', '저장 실패');
+  }
+  const hist = loadHistoryLS();
+  const idx = hist.findIndex(h => h.id === id);
+  if (idx >= 0) { hist[idx].taxInvoiceIssuedDate = dateStr; saveHistoryLS(hist); }
 }
 
 function loadQuote(id) {
