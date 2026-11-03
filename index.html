@@ -9,8 +9,10 @@
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <!-- Flatpickr: 날짜 범위 선택기 -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://npmcdn.com/flatpickr/dist/plugins/confirmDate/confirmDate.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://npmcdn.com/flatpickr/dist/l10n/ko.js"></script>
+<script src="https://npmcdn.com/flatpickr/dist/plugins/confirmDate/confirmDate.js"></script>
 <script type="module">
   // Firebase Modular SDK v10.14.1 (named database 지원: v10.7.0+)
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
@@ -135,22 +137,17 @@ tbody tr:hover td{background:#fafbfd}
 .add-item-row td{padding:6px 10px;background:#fafbfc}
 /* History tab */
 #tab-history{overflow-y:auto;padding:16px;flex-direction:column}
-.history-toolbar{margin-bottom:12px;display:flex;flex-direction:column;gap:10px}
+.history-toolbar{margin-bottom:12px;display:flex;flex-direction:column;gap:8px}
 .history-toolbar h2{font-size:15px;color:#1a3a5c;font-weight:700;margin:0}
-.hf-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.hf-row-search input[type=text]{border:1px solid #cdd2da;border-radius:4px;padding:6px 10px;font-size:12px;font-family:inherit;background:#fff;color:#333;transition:border-color .15s}
-.hf-row-search input[type=text]:focus{outline:2px solid #1a3a5c;outline-offset:-1px;border-color:#1a3a5c}
+.hf-main{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;row-gap:8px}
+.hf-left,.hf-right{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hf-main input[type=text]{border:1px solid #cdd2da;border-radius:4px;padding:6px 10px;font-size:12px;font-family:inherit;background:#fff;color:#333;transition:border-color .15s}
+.hf-main input[type=text]:focus{outline:2px solid #1a3a5c;outline-offset:-1px;border-color:#1a3a5c}
 #hf-search-client{width:140px}
 #hf-search-project{width:200px}
 #hf-date-range{width:220px;cursor:pointer}
-.hf-date-group{display:inline-flex;flex-direction:column;gap:4px}
-.hf-quick-chips{display:flex;gap:4px;flex-wrap:wrap}
-.hf-quick-chips button{padding:3px 10px;background:#f3f4f6;border:1px solid #e0e4ea;border-radius:12px;cursor:pointer;font-size:11px;font-family:inherit;color:#555;transition:all .12s}
-.hf-quick-chips button:hover{background:#1a3a5c;border-color:#1a3a5c;color:#fff}
-.hf-quick-chips .hf-chip-clear{padding:3px 8px;color:#999}
-.hf-quick-chips .hf-chip-clear:hover{background:#c0392b;border-color:#c0392b;color:#fff}
-.hf-row-filter select{border:1px solid #cdd2da;border-radius:4px;padding:5px 10px;font-size:12px;font-family:inherit;background:#fff;color:#333;max-width:200px}
-.hf-row-filter select:focus{outline:2px solid #1a3a5c;outline-offset:-1px;border-color:#1a3a5c}
+.hf-right select{border:1px solid #cdd2da;border-radius:4px;padding:5px 10px;font-size:12px;font-family:inherit;background:#fff;color:#333;max-width:200px}
+.hf-right select:focus{outline:2px solid #1a3a5c;outline-offset:-1px;border-color:#1a3a5c}
 .hf-reset-btn{background:#f3f4f6;color:#555;border:1px solid #cdd2da}
 .hf-reset-btn:hover{background:#e5e7eb;border-color:#9ca3af;color:#1a3a5c}
 /* Flatpickr 커스텀 (BELCOM 톤) */
@@ -175,6 +172,14 @@ tbody tr:hover td{background:#fafbfd}
 .flatpickr-calendar.belcom-cal span.flatpickr-weekday:last-child{color:#1a73e8}
 .flatpickr-calendar.belcom-cal .dayContainer .flatpickr-day:nth-child(7n+1):not(.selected):not(.startRange):not(.endRange):not(.inRange){color:#c0392b}
 .flatpickr-calendar.belcom-cal .dayContainer .flatpickr-day:nth-child(7n):not(.selected):not(.startRange):not(.endRange):not(.inRange){color:#1a73e8}
+/* 캘린더 내부 빠른 선택 버튼 (월 이동 화살표와 겹치지 않도록 months와 days 사이에 배치) */
+.flatpickr-calendar.belcom-cal .hf-quick-bar{display:flex;gap:4px;padding:6px 10px;flex-wrap:wrap;background:#f8f9fa;border-top:1px solid #eef0f3;border-bottom:1px solid #eef0f3;justify-content:center}
+.flatpickr-calendar.belcom-cal .hf-quick-bar button{padding:3px 10px;background:#fff;border:1px solid #cdd2da;border-radius:12px;cursor:pointer;font-size:11px;font-family:inherit;color:#555;transition:all .12s}
+.flatpickr-calendar.belcom-cal .hf-quick-bar button:hover{background:#1a3a5c;border-color:#1a3a5c;color:#fff}
+/* confirmDate 플러그인 '적용' 버튼 BELCOM 톤 */
+.flatpickr-calendar.belcom-cal .flatpickr-confirm{background:#1a3a5c;color:#fff;font-weight:600;cursor:pointer;transition:background .12s;border-top:1px solid #122a44}
+.flatpickr-calendar.belcom-cal .flatpickr-confirm:hover{background:#122a44}
+.flatpickr-calendar.belcom-cal .flatpickr-confirm svg path{fill:#fff}
 .history-list{display:flex;flex-direction:column;gap:8px}
 .history-item{background:#fff;border:1px solid #e0e4ea;border-radius:6px;padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .15s}
 .history-item:hover{border-color:#1a3a5c;background:#f0f4ff}
@@ -487,39 +492,31 @@ tr.expense-row:hover td{background:#fff5d6}
 <div id="tab-history" class="tab-content">
   <div class="history-toolbar">
     <h2>견적 이력</h2>
-    <div class="hf-row hf-row-search">
-      <input type="text" id="hf-search-client" placeholder="수신처" onkeydown="if(event.key==='Enter')applyHistorySearch()">
-      <input type="text" id="hf-search-project" placeholder="프로젝트명" onkeydown="if(event.key==='Enter')applyHistorySearch()">
-      <div class="hf-date-group">
+    <div class="hf-main">
+      <div class="hf-left">
+        <input type="text" id="hf-search-client" placeholder="수신처" onkeydown="if(event.key==='Enter')applyHistorySearch()">
+        <input type="text" id="hf-search-project" placeholder="프로젝트명" onkeydown="if(event.key==='Enter')applyHistorySearch()">
         <input type="text" id="hf-date-range" placeholder="날짜 선택" readonly>
-        <div class="hf-quick-chips">
-          <button type="button" onclick="hfQuickSelect('yesterday')">어제</button>
-          <button type="button" onclick="hfQuickSelect('7days')">7일</button>
-          <button type="button" onclick="hfQuickSelect('30days')">30일</button>
-          <button type="button" onclick="hfQuickSelect('thisMonth')">이번 달</button>
-          <button type="button" onclick="hfQuickSelect('lastMonth')">지난 달</button>
-          <button type="button" class="hf-chip-clear" onclick="hfQuickSelect('clear')" title="날짜 비우기">✕</button>
-        </div>
+        <button class="btn btn-primary btn-sm" onclick="applyHistorySearch()">조회</button>
       </div>
-      <button class="btn btn-primary btn-sm" onclick="applyHistorySearch()">조회</button>
-    </div>
-    <div class="hf-row hf-row-filter">
-      <select id="hf-client-select" onchange="setHistoryFilter('client', this.value)" title="수신처 필터">
-        <option value="">전체 수신처</option>
-      </select>
-      <select id="hf-tax-select" onchange="setHistoryFilter('tax', this.value)" title="세금계산서 상태">
-        <option value="all">세금계산서: 전체</option>
-        <option value="issued">발행 완료</option>
-        <option value="unissued">미발행</option>
-      </select>
-      <select id="hf-sort-select" onchange="setHistoryFilter('sort', this.value)" title="정렬">
-        <option value="date-desc">날짜 최신순</option>
-        <option value="date-asc">날짜 오래된순</option>
-        <option value="client-asc">수신처 가나다순</option>
-        <option value="total-desc">금액 높은순</option>
-        <option value="total-asc">금액 낮은순</option>
-      </select>
-      <button class="btn btn-sm hf-reset-btn" onclick="resetHistoryFilters()" title="검색/필터/정렬 전체 초기화">초기화</button>
+      <div class="hf-right">
+        <select id="hf-client-select" onchange="setHistoryFilter('client', this.value)" title="수신처 필터">
+          <option value="">전체 수신처</option>
+        </select>
+        <select id="hf-tax-select" onchange="setHistoryFilter('tax', this.value)" title="세금계산서 상태">
+          <option value="all">세금계산서: 전체</option>
+          <option value="issued">발행 완료</option>
+          <option value="unissued">미발행</option>
+        </select>
+        <select id="hf-sort-select" onchange="setHistoryFilter('sort', this.value)" title="정렬">
+          <option value="date-desc">날짜 최신순</option>
+          <option value="date-asc">날짜 오래된순</option>
+          <option value="client-asc">수신처 가나다순</option>
+          <option value="total-desc">금액 높은순</option>
+          <option value="total-asc">금액 낮은순</option>
+        </select>
+        <button class="btn btn-sm hf-reset-btn" onclick="resetHistoryFilters()" title="검색/필터/정렬 전체 초기화">초기화</button>
+      </div>
     </div>
   </div>
   <div class="history-list" id="history-list"></div>
@@ -2844,15 +2841,30 @@ function _hfQuickRange(kind) {
   return [null, null];
 }
 
-// 캘린더 외부의 빠른 선택 칩: Flatpickr의 선택만 바꾸고 캘린더는 열지 않음 — 적용은 '조회' 버튼
-function hfQuickSelect(kind) {
-  if (kind === 'clear') {
-    if (hfFlatpickr) hfFlatpickr.clear(false);
-    return;
-  }
-  const [s, e] = _hfQuickRange(kind);
-  if (!s || !e || !hfFlatpickr) return;
-  hfFlatpickr.setDate([s, e], false);
+// 캘린더 내부에 삽입할 빠른 선택 바 (월 이동 화살표와 겹치지 않도록 months와 days 사이에 배치)
+function _hfInjectQuickBar(inst) {
+  const cal = inst.calendarContainer;
+  if (!cal || cal.querySelector('.hf-quick-bar')) return;
+  const months = cal.querySelector('.flatpickr-months');
+  const inner  = cal.querySelector('.flatpickr-innerContainer');
+  if (!months || !inner) return;
+  const bar = document.createElement('div');
+  bar.className = 'hf-quick-bar';
+  bar.innerHTML = [
+    ['yesterday','어제'],
+    ['7days','최근 7일'],
+    ['30days','최근 30일'],
+    ['thisMonth','이번 달'],
+    ['lastMonth','지난 달']
+  ].map(([k,l]) => `<button type="button" data-r="${k}">${l}</button>`).join('');
+  bar.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-r]');
+    if (!btn) return;
+    e.preventDefault();
+    const [s, en] = _hfQuickRange(btn.dataset.r);
+    if (s && en) inst.setDate([s, en], false);
+  });
+  cal.insertBefore(bar, inner);
 }
 
 function initHistoryDatePicker() {
@@ -2863,6 +2875,10 @@ function initHistoryDatePicker() {
     return;
   }
   if (hfFlatpickr) return;
+  const plugins = [];
+  if (typeof confirmDatePlugin !== 'undefined') {
+    plugins.push(confirmDatePlugin({ confirmText: '적용', showAlways: true, confirmIcon: '' }));
+  }
   hfFlatpickr = flatpickr(inp, {
     mode: 'range',
     dateFormat: 'Y-m-d',
@@ -2871,8 +2887,12 @@ function initHistoryDatePicker() {
     allowInput: false,
     clickOpens: true,
     closeOnSelect: false,
+    position: 'auto below',
+    static: false,
+    plugins,
     onReady: function(_sel, _str, inst) {
       if (inst.calendarContainer) inst.calendarContainer.classList.add('belcom-cal');
+      _hfInjectQuickBar(inst);
     }
   });
 }
