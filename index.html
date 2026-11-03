@@ -131,13 +131,19 @@ tbody tr:hover td{background:#fafbfd}
 .add-item-row td{padding:6px 10px;background:#fafbfc}
 /* History tab */
 #tab-history{overflow-y:auto;padding:16px;flex-direction:column}
-.history-toolbar{margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.history-toolbar{margin-bottom:12px;display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap;row-gap:8px}
 .history-toolbar h2{font-size:15px;color:#1a3a5c;font-weight:700;margin-right:auto}
 .hf-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .hf-controls input[type=text]{border:1px solid #cdd2da;border-radius:4px;padding:5px 8px;font-size:12px;font-family:inherit;width:220px}
 .hf-controls input[type=text]:focus{outline:2px solid #1a3a5c;border-color:#1a3a5c}
+.hf-controls input[type=date]{border:1px solid #cdd2da;border-radius:4px;padding:5px 8px;font-size:12px;font-family:inherit;background:#fff;color:#333}
+.hf-controls input[type=date]:focus{outline:2px solid #1a3a5c;border-color:#1a3a5c}
 .hf-controls select{border:1px solid #cdd2da;border-radius:4px;padding:5px 8px;font-size:12px;font-family:inherit;background:#fff;color:#333;max-width:180px}
 .hf-controls select:focus{outline:2px solid #1a3a5c;border-color:#1a3a5c}
+.hf-controls .hf-label{font-size:12px;color:#555;font-weight:600}
+.hf-controls .hf-dash{color:#888;font-size:12px}
+.hf-reset-btn{background:#f3f4f6;color:#555;border:1px solid #cdd2da}
+.hf-reset-btn:hover{background:#e5e7eb;border-color:#9ca3af;color:#1a3a5c}
 .history-list{display:flex;flex-direction:column;gap:8px}
 .history-item{background:#fff;border:1px solid #e0e4ea;border-radius:6px;padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .15s}
 .history-item:hover{border-color:#1a3a5c;background:#f0f4ff}
@@ -451,8 +457,17 @@ tr.expense-row:hover td{background:#fff5d6}
   <div class="history-toolbar">
     <h2>견적 이력</h2>
     <div class="hf-controls">
-      <input type="text" id="hf-search-input" placeholder="수신처 · 프로젝트명 · 날짜(YYYY-MM-DD)" onkeydown="if(event.key==='Enter')applyHistorySearch()">
+      <input type="text" id="hf-search-input" placeholder="수신처 · 프로젝트명 검색" onkeydown="if(event.key==='Enter')applyHistorySearch()">
       <button class="btn btn-primary btn-sm" onclick="applyHistorySearch()">검색</button>
+      <button class="btn btn-sm hf-reset-btn" onclick="resetHistoryFilters()" title="검색/필터/정렬 전체 초기화">초기화</button>
+    </div>
+    <div class="hf-controls hf-row-date">
+      <span class="hf-label">📅 날짜 범위</span>
+      <input type="date" id="hf-start-date" onchange="setHistoryFilter('startDate', this.value)" title="시작일">
+      <span class="hf-dash">~</span>
+      <input type="date" id="hf-end-date" onchange="setHistoryFilter('endDate', this.value)" title="종료일">
+    </div>
+    <div class="hf-controls">
       <select id="hf-client-select" onchange="setHistoryFilter('client', this.value)" title="수신처 필터">
         <option value="">전체 수신처</option>
       </select>
@@ -2689,7 +2704,8 @@ function importPriceExcel(e) {
 // ===== 탭3: 견적 이력 =====
 const LS_HISTORY_FILTERS = 'belcom_history_filters_v1';
 const LS_TAX_FILTER_LEGACY = 'belcom_tax_filter_v1';
-let historyFilters = { client: '', tax: 'all', sort: 'date-desc' };
+const DEFAULT_HISTORY_FILTERS = { client: '', tax: 'all', sort: 'date-desc', startDate: '', endDate: '' };
+let historyFilters = { ...DEFAULT_HISTORY_FILTERS };
 let historySearch = '';
 
 function loadHistoryFilters() {
@@ -2700,6 +2716,8 @@ function loadHistoryFilters() {
       if (typeof obj.client === 'string') historyFilters.client = obj.client;
       if (obj.tax === 'all' || obj.tax === 'issued' || obj.tax === 'unissued') historyFilters.tax = obj.tax;
       if (typeof obj.sort === 'string') historyFilters.sort = obj.sort;
+      if (typeof obj.startDate === 'string') historyFilters.startDate = obj.startDate;
+      if (typeof obj.endDate === 'string') historyFilters.endDate = obj.endDate;
     } else {
       // 구 taxFilter 설정 마이그레이션
       const legacy = localStorage.getItem(LS_TAX_FILTER_LEGACY);
@@ -2720,6 +2738,16 @@ function applyHistorySearch() {
   historySearch = ((input && input.value) || '').trim().toLowerCase();
   renderHistory();
 }
+function resetHistoryFilters() {
+  historyFilters = { ...DEFAULT_HISTORY_FILTERS };
+  historySearch = '';
+  const sInp = document.getElementById('hf-search-input');
+  if (sInp) sInp.value = '';
+  const sd = document.getElementById('hf-start-date'); if (sd) sd.value = '';
+  const ed = document.getElementById('hf-end-date');   if (ed) ed.value = '';
+  saveHistoryFilters();
+  renderHistory();
+}
 
 function renderClientFilterOptions() {
   const sel = document.getElementById('hf-client-select');
@@ -2738,23 +2766,32 @@ function renderHistory() {
   // UI 컨트롤 상태 동기화
   const taxSel  = document.getElementById('hf-tax-select');
   const sortSel = document.getElementById('hf-sort-select');
+  const sdInp   = document.getElementById('hf-start-date');
+  const edInp   = document.getElementById('hf-end-date');
   if (taxSel)  taxSel.value  = historyFilters.tax;
   if (sortSel) sortSel.value = historyFilters.sort;
+  if (sdInp)   sdInp.value   = historyFilters.startDate || '';
+  if (edInp)   edInp.value   = historyFilters.endDate   || '';
   renderClientFilterOptions();
 
   if (!quoteHistory.length) { el.innerHTML='<div class="empty-msg">저장된 견적이 없습니다.</div>'; return; }
 
   let list = quoteHistory.slice();
 
-  // 검색 (수신처, 프로젝트명, 날짜)
+  // 텍스트 검색 (수신처, 프로젝트명)
   if (historySearch) {
     const q = historySearch;
     list = list.filter(h =>
       (h.client||'').toLowerCase().includes(q) ||
-      (h.project||'').toLowerCase().includes(q) ||
-      (h.date||'').toLowerCase().includes(q)
+      (h.project||'').toLowerCase().includes(q)
     );
   }
+
+  // 날짜 범위 필터 (견적일자 h.date 기준, YYYY-MM-DD 문자열 비교)
+  const sd = historyFilters.startDate || '';
+  const ed = historyFilters.endDate   || '';
+  if (sd) list = list.filter(h => (h.date||'') >= sd);
+  if (ed) list = list.filter(h => (h.date||'') <= ed);
 
   // 수신처 필터
   if (historyFilters.client) {
