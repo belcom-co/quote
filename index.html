@@ -135,19 +135,24 @@ tbody tr:hover td{background:#fafbfd}
 .add-item-row td{padding:6px 10px;background:#fafbfc}
 /* History tab */
 #tab-history{overflow-y:auto;padding:16px;flex-direction:column}
-.history-toolbar{margin-bottom:12px;display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap;row-gap:8px}
-.history-toolbar h2{font-size:15px;color:#1a3a5c;font-weight:700;margin-right:auto}
-.hf-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.hf-controls input[type=text]{border:1px solid #cdd2da;border-radius:4px;padding:5px 8px;font-size:12px;font-family:inherit;width:220px}
-.hf-controls input[type=text]:focus{outline:2px solid #1a3a5c;border-color:#1a3a5c}
-.hf-controls #hf-date-range{width:240px;cursor:pointer;background:#fff;color:#333}
-.hf-controls #hf-date-range:focus{outline:2px solid #1a3a5c;border-color:#1a3a5c}
-.hf-controls select{border:1px solid #cdd2da;border-radius:4px;padding:5px 8px;font-size:12px;font-family:inherit;background:#fff;color:#333;max-width:180px}
-.hf-controls select:focus{outline:2px solid #1a3a5c;border-color:#1a3a5c}
-.hf-controls .hf-label{font-size:12px;color:#555;font-weight:600}
-.hf-reset-btn,.hf-range-clear-btn{background:#f3f4f6;color:#555;border:1px solid #cdd2da}
-.hf-reset-btn:hover,.hf-range-clear-btn:hover{background:#e5e7eb;border-color:#9ca3af;color:#1a3a5c}
-.hf-range-clear-btn{padding:4px 8px;line-height:1}
+.history-toolbar{margin-bottom:12px;display:flex;flex-direction:column;gap:10px}
+.history-toolbar h2{font-size:15px;color:#1a3a5c;font-weight:700;margin:0}
+.hf-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hf-row-search input[type=text]{border:1px solid #cdd2da;border-radius:4px;padding:6px 10px;font-size:12px;font-family:inherit;background:#fff;color:#333;transition:border-color .15s}
+.hf-row-search input[type=text]:focus{outline:2px solid #1a3a5c;outline-offset:-1px;border-color:#1a3a5c}
+#hf-search-client{width:140px}
+#hf-search-project{width:200px}
+#hf-date-range{width:220px;cursor:pointer}
+.hf-date-group{display:inline-flex;flex-direction:column;gap:4px}
+.hf-quick-chips{display:flex;gap:4px;flex-wrap:wrap}
+.hf-quick-chips button{padding:3px 10px;background:#f3f4f6;border:1px solid #e0e4ea;border-radius:12px;cursor:pointer;font-size:11px;font-family:inherit;color:#555;transition:all .12s}
+.hf-quick-chips button:hover{background:#1a3a5c;border-color:#1a3a5c;color:#fff}
+.hf-quick-chips .hf-chip-clear{padding:3px 8px;color:#999}
+.hf-quick-chips .hf-chip-clear:hover{background:#c0392b;border-color:#c0392b;color:#fff}
+.hf-row-filter select{border:1px solid #cdd2da;border-radius:4px;padding:5px 10px;font-size:12px;font-family:inherit;background:#fff;color:#333;max-width:200px}
+.hf-row-filter select:focus{outline:2px solid #1a3a5c;outline-offset:-1px;border-color:#1a3a5c}
+.hf-reset-btn{background:#f3f4f6;color:#555;border:1px solid #cdd2da}
+.hf-reset-btn:hover{background:#e5e7eb;border-color:#9ca3af;color:#1a3a5c}
 /* Flatpickr 커스텀 (BELCOM 톤) */
 .flatpickr-calendar.belcom-cal{box-shadow:0 10px 32px rgba(0,0,0,.18);border:1px solid #e0e4ea;border-radius:8px}
 .flatpickr-calendar.belcom-cal .flatpickr-day.selected,
@@ -170,15 +175,6 @@ tbody tr:hover td{background:#fafbfd}
 .flatpickr-calendar.belcom-cal span.flatpickr-weekday:last-child{color:#1a73e8}
 .flatpickr-calendar.belcom-cal .dayContainer .flatpickr-day:nth-child(7n+1):not(.selected):not(.startRange):not(.endRange):not(.inRange){color:#c0392b}
 .flatpickr-calendar.belcom-cal .dayContainer .flatpickr-day:nth-child(7n):not(.selected):not(.startRange):not(.endRange):not(.inRange){color:#1a73e8}
-.flatpickr-calendar.belcom-cal .hf-quick-bar{display:flex;gap:4px;padding:8px 10px 6px;border-bottom:1px solid #eef0f3;flex-wrap:wrap;background:#f8f9fa}
-.flatpickr-calendar.belcom-cal .hf-quick-bar button{padding:4px 10px;background:#fff;border:1px solid #cdd2da;border-radius:4px;cursor:pointer;font-size:11px;font-family:inherit;color:#333}
-.flatpickr-calendar.belcom-cal .hf-quick-bar button:hover{background:#1a3a5c;border-color:#1a3a5c;color:#fff}
-.flatpickr-calendar.belcom-cal .hf-action-bar{display:flex;gap:6px;padding:8px 10px;border-top:1px solid #eef0f3;justify-content:flex-end;background:#f8f9fa}
-.flatpickr-calendar.belcom-cal .hf-action-bar button{padding:5px 14px;border-radius:4px;cursor:pointer;font-size:12px;font-family:inherit}
-.flatpickr-calendar.belcom-cal .hf-action-bar .hf-cancel{background:#fff;border:1px solid #cdd2da;color:#555}
-.flatpickr-calendar.belcom-cal .hf-action-bar .hf-cancel:hover{background:#f3f4f6}
-.flatpickr-calendar.belcom-cal .hf-action-bar .hf-apply{background:#1a3a5c;border:1px solid #1a3a5c;color:#fff;font-weight:600}
-.flatpickr-calendar.belcom-cal .hf-action-bar .hf-apply:hover{background:#122a44}
 .history-list{display:flex;flex-direction:column;gap:8px}
 .history-item{background:#fff;border:1px solid #e0e4ea;border-radius:6px;padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .15s}
 .history-item:hover{border-color:#1a3a5c;background:#f0f4ff}
@@ -491,17 +487,23 @@ tr.expense-row:hover td{background:#fff5d6}
 <div id="tab-history" class="tab-content">
   <div class="history-toolbar">
     <h2>견적 이력</h2>
-    <div class="hf-controls">
-      <input type="text" id="hf-search-input" placeholder="수신처 · 프로젝트명 검색" onkeydown="if(event.key==='Enter')applyHistorySearch()">
-      <button class="btn btn-primary btn-sm" onclick="applyHistorySearch()">검색</button>
-      <button class="btn btn-sm hf-reset-btn" onclick="resetHistoryFilters()" title="검색/필터/정렬 전체 초기화">초기화</button>
+    <div class="hf-row hf-row-search">
+      <input type="text" id="hf-search-client" placeholder="수신처" onkeydown="if(event.key==='Enter')applyHistorySearch()">
+      <input type="text" id="hf-search-project" placeholder="프로젝트명" onkeydown="if(event.key==='Enter')applyHistorySearch()">
+      <div class="hf-date-group">
+        <input type="text" id="hf-date-range" placeholder="날짜 선택" readonly>
+        <div class="hf-quick-chips">
+          <button type="button" onclick="hfQuickSelect('yesterday')">어제</button>
+          <button type="button" onclick="hfQuickSelect('7days')">7일</button>
+          <button type="button" onclick="hfQuickSelect('30days')">30일</button>
+          <button type="button" onclick="hfQuickSelect('thisMonth')">이번 달</button>
+          <button type="button" onclick="hfQuickSelect('lastMonth')">지난 달</button>
+          <button type="button" class="hf-chip-clear" onclick="hfQuickSelect('clear')" title="날짜 비우기">✕</button>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="applyHistorySearch()">조회</button>
     </div>
-    <div class="hf-controls hf-row-date">
-      <span class="hf-label">📅 날짜 범위</span>
-      <input type="text" id="hf-date-range" placeholder="날짜 범위를 선택하세요" readonly>
-      <button type="button" class="btn btn-sm hf-range-clear-btn" onclick="clearHistoryDateRange()" title="날짜 범위 지우기">✕</button>
-    </div>
-    <div class="hf-controls">
+    <div class="hf-row hf-row-filter">
       <select id="hf-client-select" onchange="setHistoryFilter('client', this.value)" title="수신처 필터">
         <option value="">전체 수신처</option>
       </select>
@@ -517,6 +519,7 @@ tr.expense-row:hover td{background:#fff5d6}
         <option value="total-desc">금액 높은순</option>
         <option value="total-asc">금액 낮은순</option>
       </select>
+      <button class="btn btn-sm hf-reset-btn" onclick="resetHistoryFilters()" title="검색/필터/정렬 전체 초기화">초기화</button>
     </div>
   </div>
   <div class="history-list" id="history-list"></div>
@@ -2739,9 +2742,14 @@ function importPriceExcel(e) {
 // ===== 탭3: 견적 이력 =====
 const LS_HISTORY_FILTERS = 'belcom_history_filters_v1';
 const LS_TAX_FILTER_LEGACY = 'belcom_tax_filter_v1';
-const DEFAULT_HISTORY_FILTERS = { client: '', tax: 'all', sort: 'date-desc', startDate: '', endDate: '' };
+// 저장되는 필터: 수신처 드롭다운 / 세금계산서 / 정렬 (조회 입력값은 저장 안 함)
+const DEFAULT_HISTORY_FILTERS = { client: '', tax: 'all', sort: 'date-desc' };
 let historyFilters = { ...DEFAULT_HISTORY_FILTERS };
-let historySearch = '';
+// 조회 입력(세션 전용): 수신처/프로젝트명 부분 일치 + 날짜 범위
+let historySearchClient    = '';
+let historySearchProject   = '';
+let historySearchStartDate = '';
+let historySearchEndDate   = '';
 
 function loadHistoryFilters() {
   try {
@@ -2751,8 +2759,6 @@ function loadHistoryFilters() {
       if (typeof obj.client === 'string') historyFilters.client = obj.client;
       if (obj.tax === 'all' || obj.tax === 'issued' || obj.tax === 'unissued') historyFilters.tax = obj.tax;
       if (typeof obj.sort === 'string') historyFilters.sort = obj.sort;
-      if (typeof obj.startDate === 'string') historyFilters.startDate = obj.startDate;
-      if (typeof obj.endDate === 'string') historyFilters.endDate = obj.endDate;
     } else {
       // 구 taxFilter 설정 마이그레이션
       const legacy = localStorage.getItem(LS_TAX_FILTER_LEGACY);
@@ -2763,29 +2769,39 @@ function loadHistoryFilters() {
 function saveHistoryFilters() {
   try { localStorage.setItem(LS_HISTORY_FILTERS, JSON.stringify(historyFilters)); } catch(e) {}
 }
+// 필터/정렬 즉시 적용 (드롭다운 변경 시)
 function setHistoryFilter(key, val) {
   historyFilters[key] = val;
   saveHistoryFilters();
   renderHistory();
 }
+// '조회' 버튼 / 엔터 키: 수신처+프로젝트명+날짜 범위 모두 수집하여 적용
 function applyHistorySearch() {
-  const input = document.getElementById('hf-search-input');
-  historySearch = ((input && input.value) || '').trim().toLowerCase();
+  const cEl = document.getElementById('hf-search-client');
+  const pEl = document.getElementById('hf-search-project');
+  historySearchClient  = ((cEl && cEl.value) || '').trim().toLowerCase();
+  historySearchProject = ((pEl && pEl.value) || '').trim().toLowerCase();
+  if (hfFlatpickr && hfFlatpickr.selectedDates && hfFlatpickr.selectedDates.length) {
+    const d = hfFlatpickr.selectedDates;
+    if (d.length >= 2) {
+      historySearchStartDate = _hfFmt(d[0]);
+      historySearchEndDate   = _hfFmt(d[1]);
+    } else {
+      historySearchStartDate = _hfFmt(d[0]);
+      historySearchEndDate   = '';
+    }
+  } else {
+    historySearchStartDate = '';
+    historySearchEndDate   = '';
+  }
   renderHistory();
 }
+// 초기화: 조회 입력 + 필터/정렬 모두 리셋
 function resetHistoryFilters() {
   historyFilters = { ...DEFAULT_HISTORY_FILTERS };
-  historySearch = '';
-  const sInp = document.getElementById('hf-search-input');
-  if (sInp) sInp.value = '';
-  if (hfFlatpickr) hfFlatpickr.clear(false);
-  saveHistoryFilters();
-  renderHistory();
-}
-
-function clearHistoryDateRange() {
-  historyFilters.startDate = '';
-  historyFilters.endDate = '';
+  historySearchClient = historySearchProject = historySearchStartDate = historySearchEndDate = '';
+  const cEl = document.getElementById('hf-search-client');  if (cEl) cEl.value = '';
+  const pEl = document.getElementById('hf-search-project'); if (pEl) pEl.value = '';
   if (hfFlatpickr) hfFlatpickr.clear(false);
   saveHistoryFilters();
   renderHistory();
@@ -2828,68 +2844,21 @@ function _hfQuickRange(kind) {
   return [null, null];
 }
 
-function _hfCurrentDates() {
-  const out = [];
-  if (historyFilters.startDate) out.push(historyFilters.startDate);
-  if (historyFilters.endDate)   out.push(historyFilters.endDate);
-  return out;
-}
-
-function _hfAttachExtras(inst) {
-  const cont = inst.calendarContainer;
-  if (!cont || cont.querySelector('.hf-quick-bar')) return;
-  cont.classList.add('belcom-cal');
-
-  const qbar = document.createElement('div');
-  qbar.className = 'hf-quick-bar';
-  qbar.innerHTML = [
-    ['yesterday','어제'],
-    ['7days','최근 7일'],
-    ['30days','최근 30일'],
-    ['thisMonth','이번 달'],
-    ['lastMonth','지난 달']
-  ].map(([k,l]) => `<button type="button" data-r="${k}">${l}</button>`).join('');
-  qbar.addEventListener('click', e => {
-    const btn = e.target.closest('button[data-r]');
-    if (!btn) return;
-    e.preventDefault();
-    const [s, en] = _hfQuickRange(btn.dataset.r);
-    if (s && en) inst.setDate([s, en], false);
-  });
-  cont.insertBefore(qbar, cont.firstChild);
-
-  const abar = document.createElement('div');
-  abar.className = 'hf-action-bar';
-  abar.innerHTML = '<button type="button" class="hf-cancel">취소</button><button type="button" class="hf-apply">적용</button>';
-  abar.querySelector('.hf-cancel').addEventListener('click', () => {
-    inst._hfApplied = false;
-    inst.close();
-  });
-  abar.querySelector('.hf-apply').addEventListener('click', () => {
-    inst._hfApplied = true;
-    const dates = inst.selectedDates;
-    if (dates.length >= 2) {
-      historyFilters.startDate = _hfFmt(dates[0]);
-      historyFilters.endDate   = _hfFmt(dates[1]);
-    } else if (dates.length === 1) {
-      historyFilters.startDate = _hfFmt(dates[0]);
-      historyFilters.endDate   = '';
-    } else {
-      historyFilters.startDate = '';
-      historyFilters.endDate   = '';
-    }
-    saveHistoryFilters();
-    renderHistory();
-    inst.close();
-  });
-  cont.appendChild(abar);
+// 캘린더 외부의 빠른 선택 칩: Flatpickr의 선택만 바꾸고 캘린더는 열지 않음 — 적용은 '조회' 버튼
+function hfQuickSelect(kind) {
+  if (kind === 'clear') {
+    if (hfFlatpickr) hfFlatpickr.clear(false);
+    return;
+  }
+  const [s, e] = _hfQuickRange(kind);
+  if (!s || !e || !hfFlatpickr) return;
+  hfFlatpickr.setDate([s, e], false);
 }
 
 function initHistoryDatePicker() {
   const inp = document.getElementById('hf-date-range');
   if (!inp) return;
   if (typeof flatpickr === 'undefined') {
-    // 라이브러리 아직 로드 안 됨 — 재시도
     setTimeout(initHistoryDatePicker, 300);
     return;
   }
@@ -2901,16 +2870,9 @@ function initHistoryDatePicker() {
     showMonths: 2,
     allowInput: false,
     clickOpens: true,
-    defaultDate: _hfCurrentDates(),
-    onReady: function(_sel, _str, inst) { _hfAttachExtras(inst); },
-    onClose: function(_sel, _str, inst) {
-      if (!inst._hfApplied) {
-        // 적용 안 됐으면 현재 필터 값으로 복원
-        const cur = _hfCurrentDates();
-        if (cur.length) inst.setDate(cur, false);
-        else inst.clear(false);
-      }
-      inst._hfApplied = false;
+    closeOnSelect: false,
+    onReady: function(_sel, _str, inst) {
+      if (inst.calendarContainer) inst.calendarContainer.classList.add('belcom-cal');
     }
   });
 }
@@ -2931,35 +2893,30 @@ function renderHistory() {
   if (!el) return;
   // Flatpickr 지연 초기화 (히스토리 탭 첫 렌더 시)
   if (!hfFlatpickr) initHistoryDatePicker();
-  // UI 컨트롤 상태 동기화
+  // 필터 드롭다운 상태 동기화 (조회 입력값은 사용자 입력 유지)
   const taxSel  = document.getElementById('hf-tax-select');
   const sortSel = document.getElementById('hf-sort-select');
   if (taxSel)  taxSel.value  = historyFilters.tax;
   if (sortSel) sortSel.value = historyFilters.sort;
-  if (hfFlatpickr) {
-    const cur = hfFlatpickr.selectedDates.map(d => _hfFmt(d));
-    const want = _hfCurrentDates();
-    const same = cur.length === want.length && cur.every((v,i) => v === want[i]);
-    if (!same) { if (want.length) hfFlatpickr.setDate(want, false); else hfFlatpickr.clear(false); }
-  }
   renderClientFilterOptions();
 
   if (!quoteHistory.length) { el.innerHTML='<div class="empty-msg">저장된 견적이 없습니다.</div>'; return; }
 
   let list = quoteHistory.slice();
 
-  // 텍스트 검색 (수신처, 프로젝트명)
-  if (historySearch) {
-    const q = historySearch;
-    list = list.filter(h =>
-      (h.client||'').toLowerCase().includes(q) ||
-      (h.project||'').toLowerCase().includes(q)
-    );
+  // 조회 입력: 수신처 부분 일치
+  if (historySearchClient) {
+    const q = historySearchClient;
+    list = list.filter(h => (h.client||'').toLowerCase().includes(q));
   }
-
-  // 날짜 범위 필터 (견적일자 h.date 기준, YYYY-MM-DD 문자열 비교)
-  const sd = historyFilters.startDate || '';
-  const ed = historyFilters.endDate   || '';
+  // 조회 입력: 프로젝트명 부분 일치
+  if (historySearchProject) {
+    const q = historySearchProject;
+    list = list.filter(h => (h.project||'').toLowerCase().includes(q));
+  }
+  // 조회 입력: 날짜 범위 (견적일자 h.date 기준, YYYY-MM-DD 문자열 비교)
+  const sd = historySearchStartDate;
+  const ed = historySearchEndDate;
   if (sd) list = list.filter(h => (h.date||'') >= sd);
   if (ed) list = list.filter(h => (h.date||'') <= ed);
 
