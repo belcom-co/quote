@@ -131,8 +131,13 @@ tbody tr:hover td{background:#fafbfd}
 .add-item-row td{padding:6px 10px;background:#fafbfc}
 /* History tab */
 #tab-history{overflow-y:auto;padding:16px;flex-direction:column}
-.history-toolbar{margin-bottom:12px;display:flex;gap:8px;align-items:center}
-.history-toolbar h2{flex:1;font-size:15px;color:#1a3a5c;font-weight:700}
+.history-toolbar{margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.history-toolbar h2{font-size:15px;color:#1a3a5c;font-weight:700;margin-right:auto}
+.hf-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.hf-controls input[type=text]{border:1px solid #cdd2da;border-radius:4px;padding:5px 8px;font-size:12px;font-family:inherit;width:220px}
+.hf-controls input[type=text]:focus{outline:2px solid #1a3a5c;border-color:#1a3a5c}
+.hf-controls select{border:1px solid #cdd2da;border-radius:4px;padding:5px 8px;font-size:12px;font-family:inherit;background:#fff;color:#333;max-width:180px}
+.hf-controls select:focus{outline:2px solid #1a3a5c;border-color:#1a3a5c}
 .history-list{display:flex;flex-direction:column;gap:8px}
 .history-item{background:#fff;border:1px solid #e0e4ea;border-radius:6px;padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .15s}
 .history-item:hover{border-color:#1a3a5c;background:#f0f4ff}
@@ -153,9 +158,6 @@ tbody tr:hover td{background:#fafbfd}
 .history-item.tax-issued:hover{background:#e2f3e2;border-color:#2a7a3a}
 .history-item.tax-unissued{background:#fff5f0;border-color:#f0d2c0}
 .history-item.tax-unissued:hover{background:#ffe8d8;border-color:#d08a4a}
-.history-filter-btn{padding:5px 12px;border:1px solid #cdd2da;background:#fff;border-radius:4px;cursor:pointer;font-size:12px;font-family:inherit;color:#555;transition:all .15s}
-.history-filter-btn:hover{background:#f0f4ff;border-color:#1a3a5c;color:#1a3a5c}
-.history-filter-btn.active{background:#1a3a5c;color:#fff;border-color:#1a3a5c}
 /* Table borders */
 #quote-table th,#quote-table td,.price-table th,.price-table td,.group-qtable th,.group-qtable td{border:1px solid #d2d7e2}
 #quote-table th,.price-table th,.group-qtable th{border-bottom:2px solid #b0b8cc;background:#eceff5}
@@ -448,10 +450,43 @@ tr.expense-row:hover td{background:#fff5d6}
 <div id="tab-history" class="tab-content">
   <div class="history-toolbar">
     <h2>견적 이력</h2>
-    <button class="history-filter-btn active" id="hf-all" onclick="setTaxFilter('all')">전체 보기</button>
-    <button class="history-filter-btn" id="hf-unissued" onclick="setTaxFilter('unissued')">미발행만 보기</button>
+    <div class="hf-controls">
+      <input type="text" id="hf-search-input" placeholder="수신처 · 프로젝트명 · 날짜(YYYY-MM-DD)" onkeydown="if(event.key==='Enter')applyHistorySearch()">
+      <button class="btn btn-primary btn-sm" onclick="applyHistorySearch()">검색</button>
+      <select id="hf-client-select" onchange="setHistoryFilter('client', this.value)" title="수신처 필터">
+        <option value="">전체 수신처</option>
+      </select>
+      <select id="hf-tax-select" onchange="setHistoryFilter('tax', this.value)" title="세금계산서 상태">
+        <option value="all">세금계산서: 전체</option>
+        <option value="issued">발행 완료</option>
+        <option value="unissued">미발행</option>
+      </select>
+      <select id="hf-sort-select" onchange="setHistoryFilter('sort', this.value)" title="정렬">
+        <option value="date-desc">날짜 최신순</option>
+        <option value="date-asc">날짜 오래된순</option>
+        <option value="client-asc">수신처 가나다순</option>
+        <option value="total-desc">금액 높은순</option>
+        <option value="total-asc">금액 낮은순</option>
+      </select>
+    </div>
   </div>
   <div class="history-list" id="history-list"></div>
+</div>
+
+<!-- 견적 복사 모달 -->
+<div class="modal-overlay" id="copy-modal" onclick="closeModalOnBg(event,'copy-modal')">
+  <div class="modal" style="width:380px">
+    <h3>견적 복사</h3>
+    <p style="color:#555;font-size:12px;margin:8px 0 14px;line-height:1.5">
+      <span id="copy-modal-target" style="color:#1a3a5c;font-weight:600"></span><br>
+      위 견적을 복사합니다. 복사 방식을 선택하세요.
+    </p>
+    <div class="btn-row" style="flex-direction:column;align-items:stretch">
+      <button class="btn btn-primary" onclick="confirmCopyQuote('edit')">복사 후 바로 수정하기 (견적 작성 탭에서 수정)</button>
+      <button class="btn btn-success" onclick="confirmCopyQuote('save')">이력에 바로 복사본 저장</button>
+      <button class="btn btn-secondary" onclick="closeModal('copy-modal')">취소</button>
+    </div>
+  </div>
 </div>
 
 <!-- 수량 입력 모달 -->
@@ -892,26 +927,72 @@ async function initApp() {
   console.log('[App] Firebase 준비 완료 — 앱 초기화 시작');
   document.getElementById('inp-date').value = today();
   await loadLogoAsBase64();
+  loadHistoryFilters();
   await Promise.all([setupPriceListener(), setupHistoryListener()]);
   renderCategorySelect(); renderItemList(); renderQuoteTable();
   loadLayout();
+  // 뒤로가기: 메인 화면 진입 시 초기 상태를 replaceState로 고정
+  // (비밀번호 입력 전으로 돌아가지 않도록 pushState가 아닌 replaceState 사용)
+  try { history.replaceState({ tab: 'quote' }, '', '#quote'); } catch(e) {}
 }
 
-// ===== 탭 전환 =====
-function switchTab(btn, name) {
+// 브라우저 뒤로/앞으로 이벤트 처리
+window.addEventListener('popstate', (ev) => {
+  // 비밀번호 화면이면 무시 (사용자가 완전히 나가게 둠)
+  const lock = document.getElementById('lock-screen');
+  if (lock && !lock.classList.contains('hidden')) return;
+  _applyNavState(ev.state);
+});
+
+// ===== 탭 전환 (브라우저 뒤로가기 지원) =====
+const TAB_BTN_IDX = { quote: 0, price: 1, history: 2 };
+let _navLock = false; // popstate 처리 중 재push 방지
+
+function _applyTabUI(name) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-  btn.classList.add('active');
+  const content = document.getElementById('tab-' + name);
+  if (content) content.classList.add('active');
+  const btns = document.querySelectorAll('.tab-btn');
+  const idx = TAB_BTN_IDX[name];
+  if (idx != null && btns[idx]) btns[idx].classList.add('active');
   if (name === 'history') renderHistory();
   if (name === 'price') renderPriceTab();
 }
 
+function _pushNavState(stateObj) {
+  if (_navLock) return;
+  const hash = '#' + (stateObj.tab || 'quote') + (stateObj.imgSheet ? '-img' : '');
+  try { history.pushState(stateObj, '', hash); } catch(e) {}
+}
+
+function switchTab(btn, name) {
+  if (_navLock) return;
+  _applyTabUI(name);
+  _pushNavState({ tab: name });
+}
+
 function goToQuoteTab() {
-  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-  document.getElementById('tab-quote').classList.add('active');
-  document.querySelectorAll('.tab-btn')[0].classList.add('active');
+  _applyTabUI('quote');
+  _pushNavState({ tab: 'quote' });
+}
+
+function _applyNavState(state) {
+  _navLock = true;
+  try {
+    const s = state || { tab: 'quote' };
+    const tab = s.tab || 'quote';
+    _applyTabUI(tab);
+    // 이미지 시트 상태 동기화 (견적 작성 탭에서만 의미 있음)
+    const sec = document.getElementById('imgsheet-section');
+    if (sec) {
+      const wantOpen = !!s.imgSheet && tab === 'quote';
+      const isOpen = sec.classList.contains('open');
+      if (wantOpen !== isOpen) toggleImgSheet();
+    }
+  } finally {
+    _navLock = false;
+  }
 }
 
 // ===== 모달 =====
@@ -1184,6 +1265,8 @@ function toggleImgSheet() {
   if (rr) rr.style.display = open ? 'block' : 'none';
   if (open) renderImgSheetPages();
   saveLayout();
+  // 뒤로가기 지원: 이미지 시트 상태를 history에 반영
+  if (!_navLock) _pushNavState({ tab: 'quote', imgSheet: open });
 }
 
 // ===== 세로 리사이저 =====
@@ -2604,36 +2687,103 @@ function importPriceExcel(e) {
 }
 
 // ===== 탭3: 견적 이력 =====
-const LS_TAX_FILTER = 'belcom_tax_filter_v1';
-function getTaxFilter() {
-  const v = localStorage.getItem(LS_TAX_FILTER);
-  return v === 'unissued' ? 'unissued' : 'all';
+const LS_HISTORY_FILTERS = 'belcom_history_filters_v1';
+const LS_TAX_FILTER_LEGACY = 'belcom_tax_filter_v1';
+let historyFilters = { client: '', tax: 'all', sort: 'date-desc' };
+let historySearch = '';
+
+function loadHistoryFilters() {
+  try {
+    const raw = localStorage.getItem(LS_HISTORY_FILTERS);
+    if (raw) {
+      const obj = JSON.parse(raw) || {};
+      if (typeof obj.client === 'string') historyFilters.client = obj.client;
+      if (obj.tax === 'all' || obj.tax === 'issued' || obj.tax === 'unissued') historyFilters.tax = obj.tax;
+      if (typeof obj.sort === 'string') historyFilters.sort = obj.sort;
+    } else {
+      // 구 taxFilter 설정 마이그레이션
+      const legacy = localStorage.getItem(LS_TAX_FILTER_LEGACY);
+      if (legacy === 'unissued') historyFilters.tax = 'unissued';
+    }
+  } catch(e) {}
 }
-function setTaxFilter(mode) {
-  localStorage.setItem(LS_TAX_FILTER, mode);
-  const allBtn = document.getElementById('hf-all');
-  const unBtn  = document.getElementById('hf-unissued');
-  if (allBtn && unBtn) {
-    allBtn.classList.toggle('active', mode === 'all');
-    unBtn.classList.toggle('active', mode === 'unissued');
-  }
+function saveHistoryFilters() {
+  try { localStorage.setItem(LS_HISTORY_FILTERS, JSON.stringify(historyFilters)); } catch(e) {}
+}
+function setHistoryFilter(key, val) {
+  historyFilters[key] = val;
+  saveHistoryFilters();
   renderHistory();
+}
+function applyHistorySearch() {
+  const input = document.getElementById('hf-search-input');
+  historySearch = ((input && input.value) || '').trim().toLowerCase();
+  renderHistory();
+}
+
+function renderClientFilterOptions() {
+  const sel = document.getElementById('hf-client-select');
+  if (!sel) return;
+  const clients = Array.from(new Set(quoteHistory.map(h => (h.client||'').trim()).filter(Boolean)))
+    .sort((a,b) => a.localeCompare(b, 'ko'));
+  let cur = historyFilters.client || '';
+  if (cur && !clients.includes(cur)) { cur = ''; historyFilters.client = ''; saveHistoryFilters(); }
+  sel.innerHTML = '<option value="">전체 수신처</option>' +
+    clients.map(c => `<option value="${esc(c)}"${c===cur?' selected':''}>${esc(c)}</option>`).join('');
 }
 
 function renderHistory() {
   const el = document.getElementById('history-list');
-  const filter = getTaxFilter();
-  const allBtn = document.getElementById('hf-all');
-  const unBtn  = document.getElementById('hf-unissued');
-  if (allBtn && unBtn) {
-    allBtn.classList.toggle('active', filter === 'all');
-    unBtn.classList.toggle('active', filter === 'unissued');
-  }
+  if (!el) return;
+  // UI 컨트롤 상태 동기화
+  const taxSel  = document.getElementById('hf-tax-select');
+  const sortSel = document.getElementById('hf-sort-select');
+  if (taxSel)  taxSel.value  = historyFilters.tax;
+  if (sortSel) sortSel.value = historyFilters.sort;
+  renderClientFilterOptions();
+
   if (!quoteHistory.length) { el.innerHTML='<div class="empty-msg">저장된 견적이 없습니다.</div>'; return; }
-  const list = filter === 'unissued'
-    ? quoteHistory.filter(h => !h.taxInvoiceIssued)
-    : quoteHistory;
-  if (!list.length) { el.innerHTML='<div class="empty-msg">미발행 견적이 없습니다.</div>'; return; }
+
+  let list = quoteHistory.slice();
+
+  // 검색 (수신처, 프로젝트명, 날짜)
+  if (historySearch) {
+    const q = historySearch;
+    list = list.filter(h =>
+      (h.client||'').toLowerCase().includes(q) ||
+      (h.project||'').toLowerCase().includes(q) ||
+      (h.date||'').toLowerCase().includes(q)
+    );
+  }
+
+  // 수신처 필터
+  if (historyFilters.client) {
+    list = list.filter(h => (h.client||'').trim() === historyFilters.client);
+  }
+
+  // 세금계산서 상태 필터
+  if (historyFilters.tax === 'issued')   list = list.filter(h =>  !!h.taxInvoiceIssued);
+  else if (historyFilters.tax === 'unissued') list = list.filter(h => !h.taxInvoiceIssued);
+
+  // 정렬
+  const [sortKey, sortDir] = (historyFilters.sort || 'date-desc').split('-');
+  const dirMul = sortDir === 'asc' ? 1 : -1;
+  list.sort((a, b) => {
+    if (sortKey === 'client') {
+      return dirMul * (a.client||'').localeCompare(b.client||'', 'ko');
+    }
+    if (sortKey === 'total') {
+      return dirMul * (Number(a.total||0) - Number(b.total||0));
+    }
+    // date (기본)
+    return dirMul * (a.date||'').localeCompare(b.date||'');
+  });
+
+  if (!list.length) {
+    el.innerHTML = '<div class="empty-msg">검색 결과가 없습니다.</div>';
+    return;
+  }
+
   el.innerHTML = list.map(h=>{
     const issued = !!h.taxInvoiceIssued;
     const issuedDate = h.taxInvoiceIssuedDate || '';
@@ -2655,6 +2805,7 @@ function renderHistory() {
         </label>
         <input type="date" value="${esc(issuedDate)}" ${issued?'':'disabled'} onchange="onTaxInvoiceDateChange(event,'${h.id}')">
       </div>
+      <button class="btn btn-secondary btn-sm" onclick="copyQuote(event,'${h.id}')" title="이 견적을 복사">복사</button>
       <button class="btn btn-danger btn-sm" onclick="deleteQuote(event,'${h.id}')">삭제</button>
     </div>`;
   }).join('');
@@ -2705,6 +2856,113 @@ async function onTaxInvoiceDateChange(e, id) {
   const hist = loadHistoryLS();
   const idx = hist.findIndex(h => h.id === id);
   if (idx >= 0) { hist[idx].taxInvoiceIssuedDate = dateStr; saveHistoryLS(hist); }
+}
+
+// ===== 견적 복사 =====
+let pendingCopyId = null;
+
+function copyQuote(e, id) {
+  if (e) e.stopPropagation();
+  const src = quoteHistory.find(h => h.id === id);
+  if (!src) return;
+  pendingCopyId = id;
+  const target = `${src.client||''} / ${src.project||'(프로젝트명 없음)'}`;
+  const info = document.getElementById('copy-modal-target');
+  if (info) info.textContent = target;
+  const modal = document.getElementById('copy-modal');
+  if (modal) modal.classList.add('open');
+}
+
+function _buildCopiedQuote(src) {
+  const copy = clone(src);
+  const newId = Date.now().toString() + Math.random().toString(36).slice(2,5);
+  copy.id = newId;
+  copy.project = (src.project || src.client || '') + ' (복사)';
+  copy.date = today();
+  copy.taxInvoiceIssued = false;
+  copy.taxInvoiceIssuedDate = null;
+  copy.savedAt = new Date().toISOString();
+  // 그룹 ID 재발급 (충돌 방지)
+  if (Array.isArray(copy.groups)) {
+    copy.groups = copy.groups.map(g => ({ ...g, id: newGroupId() }));
+  }
+  // 이미지 시트: Firebase Storage 재업로드 없이 URL/storagePath 그대로 참조
+  if (copy.imageSheet && Array.isArray(copy.imageSheet.images)) {
+    copy.imageSheet.images = copy.imageSheet.images.map(im => ({
+      id: 'img_' + Date.now() + Math.random().toString(36).slice(2,6),
+      url: im.url,
+      caption: im.caption || '',
+      storagePath: im.storagePath || '',
+      pageIndex: im.pageIndex || 0,
+      cellIndex: im.cellIndex || 0,
+      split: im.split || null
+    }));
+  }
+  return copy;
+}
+
+function confirmCopyQuote(mode) {
+  const id = pendingCopyId;
+  pendingCopyId = null;
+  closeModal('copy-modal');
+  const src = quoteHistory.find(h => h.id === id);
+  if (!src) return;
+  const copied = _buildCopiedQuote(src);
+  if (mode === 'save') {
+    saveCopiedQuote(copied);
+  } else {
+    loadCopiedQuoteIntoEditor(copied);
+  }
+}
+
+async function saveCopiedQuote(entry) {
+  setSyncStatus('syncing');
+  try {
+    await fsCollection('quotes').doc(entry.id).set(entry);
+    const hist = loadHistoryLS();
+    hist.unshift(entry);
+    saveHistoryLS(hist);
+    setSyncStatus('ok');
+    alert('견적 복사본이 이력에 저장되었습니다.');
+  } catch(err) {
+    console.error('Copy quote save error:', err);
+    const hist = loadHistoryLS();
+    hist.unshift(entry);
+    saveHistoryLS(hist);
+    quoteHistory = loadHistoryLS();
+    renderHistory();
+    setSyncStatus('error', '오프라인 저장');
+    alert('견적 복사본이 저장되었습니다. (오프라인 모드)');
+  }
+}
+
+function loadCopiedQuoteIntoEditor(copied) {
+  document.getElementById('inp-client').value  = copied.client || '';
+  document.getElementById('inp-project').value = copied.project || '';
+  document.getElementById('inp-date').value    = copied.date || today();
+  document.getElementById('inp-note').value    = copied.note || DEFAULT_NOTE;
+  quoteGroups    = clone(copied.groups || []);
+  ungroupedItems = clone(copied.ungroupedItems || []);
+  if (copied.imageSheet) {
+    imageSheet = {
+      layout: copied.imageSheet.layout || '2x2',
+      captionPosition: copied.imageSheet.captionPosition || 'top',
+      sheetName: copied.imageSheet.sheetName || '이미지 시트',
+      pageCount: copied.imageSheet.pageCount || 1,
+      images: clone(copied.imageSheet.images || []),
+      cellSplits: clone(copied.imageSheet.cellSplits || {})
+    };
+    migrateImgSheet(imageSheet);
+  } else {
+    imageSheet = { layout: '2x2', captionPosition: 'top', sheetName: '이미지 시트', pageCount: 1, images: [], cellSplits: {} };
+  }
+  activeGroupId  = quoteGroups.length ? quoteGroups[0].id : null;
+  // 아직 저장되지 않은 복사본: 새 ID로 저장되도록 editingQuoteId 초기화
+  editingQuoteId = null;
+  syncImgSheetUI();
+  renderQuoteTable();
+  renderImgSheetPages();
+  goToQuoteTab();
 }
 
 function loadQuote(id) {
