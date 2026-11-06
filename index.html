@@ -7,6 +7,8 @@
 <title>BELCOM 견적 시스템</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<!-- SortableJS: 드래그 앤 드롭 순서 변경 -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <!-- Flatpickr: 날짜 범위 선택기 -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <link rel="stylesheet" href="https://npmcdn.com/flatpickr/dist/plugins/confirmDate/confirmDate.css">
@@ -237,6 +239,30 @@ tr.expense-row:hover td{background:#fff5d6}
 .ungrouped-section{border:1px dashed #d0d5dc;border-radius:6px;overflow:hidden}
 .ungrouped-header{padding:7px 12px;background:#f8f9fa;font-size:11px;font-weight:700;color:#888;border-bottom:1px solid #e0e4ea}
 #groups-container{padding:8px;display:flex;flex-direction:column;gap:8px}
+/* ===== 드래그 핸들 / 순서 이동 ===== */
+.drag-handle{display:inline-flex;align-items:center;justify-content:center;width:18px;height:22px;color:#aab2c0;cursor:grab;font-size:14px;line-height:1;user-select:none;flex-shrink:0;border-radius:3px;transition:background .12s,color .12s}
+.drag-handle:hover{background:#eef2ff;color:#1a3a5c}
+.drag-handle:active{cursor:grabbing}
+.td-drag{width:24px;padding:4px 2px;text-align:center}
+.td-move{width:46px;padding:4px 2px;text-align:center;white-space:nowrap}
+.move-btn{background:none;border:1px solid transparent;border-radius:3px;cursor:pointer;color:#8089a0;font-size:10px;padding:1px 3px;line-height:1;font-family:inherit;transition:all .12s}
+.move-btn:not(:disabled):hover{background:#eef2ff;border-color:#b8c5e8;color:#1a3a5c}
+.move-btn:disabled{color:#d0d5dc;cursor:not-allowed}
+.group-drag-handle{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;color:#8595b0;cursor:grab;font-size:15px;line-height:1;user-select:none;flex-shrink:0;border-radius:3px;margin-right:2px;transition:background .12s,color .12s}
+.group-drag-handle:hover{background:#dde6f5;color:#1a3a5c}
+.group-drag-handle:active{cursor:grabbing}
+/* Sortable ghost/chosen/drag states */
+.sortable-ghost{opacity:.35;background:#eef2ff !important}
+.sortable-ghost td{background:#eef2ff !important}
+.sortable-chosen{cursor:grabbing !important}
+.sortable-drag{opacity:.9;box-shadow:0 6px 18px rgba(26,58,92,.25)}
+.group-card.sortable-ghost{opacity:.35}
+tbody.sortable-ghost-container tr.sortable-ghost td{border-top:2px solid #1a3a5c !important}
+/* 복사 버튼 (견적 작성 상단) */
+.btn-copy-quote{display:none;background:#5a7ba5;color:#fff;padding:5px 12px;border-radius:4px;border:none;cursor:pointer;font-size:12px;font-family:inherit;font-weight:500;align-items:center;gap:4px;transition:background .15s}
+.btn-copy-quote:hover{background:#4a6a90}
+.btn-copy-quote.visible{display:inline-flex}
+.btn-copy-quote::before{content:'⧉';font-size:14px;line-height:1}
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-track{background:#f0f2f5}
 ::-webkit-scrollbar-thumb{background:#ccc;border-radius:3px}
@@ -383,6 +409,7 @@ tr.expense-row:hover td{background:#fff5d6}
     <div><label>수신처</label><input type="text" id="inp-client" placeholder="예: 현두상사"></div>
     <div><label>프로젝트명</label><input type="text" id="inp-project" placeholder="프로젝트명 입력"></div>
     <div><label>견적일자</label><input type="date" id="inp-date"></div>
+    <button type="button" class="btn-copy-quote" id="btn-copy-current" onclick="copyCurrentQuote()" style="margin-left:auto" title="현재 견적 복사">견적 복사</button>
   </div>
   <div class="quote-body">
     <div class="left-panel" id="left-panel">
@@ -1107,10 +1134,12 @@ function renderQuoteTable() {
 
   if (!quoteGroups.length && !ungroupedItems.length) {
     container.innerHTML = '<div class="empty-msg">+ 새 그룹 추가를 눌러 그룹을 만든 후<br>좌측에서 항목을 선택해 추가하세요</div>';
-    updateTotals(); updateActiveGroupHint(); return;
+    updateTotals(); updateActiveGroupHint(); updateCopyQuoteBtnVisibility(); return;
   }
 
   const tableHead = `<thead><tr>
+    <th class="td-drag" title="드래그로 이동"></th>
+    <th class="td-move">이동</th>
     <th class="td-no">No.</th>
     <th style="min-width:140px">품명</th>
     <th style="width:50px">단위</th>
@@ -1123,12 +1152,18 @@ function renderQuoteTable() {
   </tr></thead>`;
 
   const buildRows = (items, gid) => {
-    if (!items.length) return `<tr><td colspan="9" class="empty-msg" style="padding:12px">이 그룹을 선택 후 좌측에서 항목을 추가하세요</td></tr>`;
+    if (!items.length) return `<tr data-empty="1"><td colspan="11" class="empty-msg" style="padding:12px">이 그룹을 선택 후 좌측에서 항목을 추가하세요</td></tr>`;
+    const last = items.length - 1;
     return items.map((item, i) => {
       const sup = item.qty * item.price;
       const tax = Math.round(sup * 0.1);
       const key = gid + '_' + i;
-      return `<tr${item.isExpense?' class="expense-row"':''}>
+      return `<tr${item.isExpense?' class="expense-row"':''} data-item-idx="${i}">
+      <td class="td-drag"><span class="drag-handle item-drag-handle" title="드래그로 이동">≡</span></td>
+      <td class="td-move">
+        <button class="move-btn" onclick="moveGroupItem('${gid}',${i},-1)"${i===0?' disabled':''} title="위로">▲</button>
+        <button class="move-btn" onclick="moveGroupItem('${gid}',${i},1)"${i===last?' disabled':''} title="아래로">▼</button>
+      </td>
       <td class="td-no">${i+1}</td>
       <td><input class="editable" value="${esc(item.name)}" onchange="updateGroupItem('${gid}',${i},'name',this.value)" style="min-width:130px;width:100%"></td>
       <td class="td-ctr"><input class="editable" value="${esc(item.unit||'')}" onchange="updateGroupItem('${gid}',${i},'unit',this.value)" style="width:44px;text-align:center"></td>
@@ -1148,6 +1183,7 @@ function renderQuoteTable() {
     const subTax = Math.round(sub * 0.1);
     return `<div class="group-card${isActive?' active':''}" data-group-id="${grp.id}">
   <div class="group-card-header" onclick="setActiveGroup('${grp.id}')">
+    <span class="group-drag-handle" onclick="event.stopPropagation()" title="그룹 드래그로 이동">⋮⋮</span>
     <input class="group-name-input" value="${esc(grp.name)}" onclick="event.stopPropagation()" onchange="updateGroup('${grp.id}','name',this.value)" placeholder="그룹 이름">
     <input class="group-sublabel-input" value="${esc(grp.subLabel||'')}" onclick="event.stopPropagation()" onchange="updateGroup('${grp.id}','subLabel',this.value)" placeholder="서브라벨 (예: 12:35 방송)">
     <label onclick="event.stopPropagation()" style="font-size:11px;color:#555;white-space:nowrap;cursor:pointer;display:flex;align-items:center;gap:3px">
@@ -1161,7 +1197,7 @@ function renderQuoteTable() {
     </div>
   </div>
   <div style="overflow-x:auto">
-    <table class="group-qtable" style="min-width:700px">${tableHead}<tbody>${buildRows(grp.items, grp.id)}</tbody></table>
+    <table class="group-qtable" style="min-width:700px">${tableHead}<tbody class="group-items-tbody" data-group-id="${grp.id}">${buildRows(grp.items, grp.id)}</tbody></table>
   </div>
   ${grp.showSubtotal?`<div class="group-subtotal-row" data-subtotal="${grp.id}">소계: 공급가액 ${fmt(sub)}원 &nbsp;/&nbsp; 세액 ${fmt(subTax)}원 &nbsp;/&nbsp; 합계 ${fmt(sub+subTax)}원</div>`:''}
 </div>`;
@@ -1171,7 +1207,7 @@ function renderQuoteTable() {
     html += `<div class="ungrouped-section">
   <div class="ungrouped-header">기타 항목 (그룹 미지정)</div>
   <div style="overflow-x:auto">
-    <table class="group-qtable" style="min-width:700px">${tableHead}<tbody>${buildRows(ungroupedItems,'__ungrouped__')}</tbody></table>
+    <table class="group-qtable" style="min-width:700px">${tableHead}<tbody class="group-items-tbody" data-group-id="__ungrouped__">${buildRows(ungroupedItems,'__ungrouped__')}</tbody></table>
   </div>
 </div>`;
   }
@@ -1179,6 +1215,8 @@ function renderQuoteTable() {
   container.innerHTML = html;
   updateTotals();
   updateActiveGroupHint();
+  initSortables();
+  updateCopyQuoteBtnVisibility();
 }
 
 function updateActiveGroupHint() {
@@ -1922,6 +1960,79 @@ function moveGroup(id, dir) {
   renderQuoteTable();
 }
 
+// 그룹 내 항목을 위/아래 화살표로 한 칸 이동
+function moveGroupItem(gid, i, dir) {
+  const items = gid === '__ungrouped__' ? ungroupedItems : (quoteGroups.find(g=>g.id===gid)||{items:[]}).items;
+  const newIdx = i + dir;
+  if (newIdx < 0 || newIdx >= items.length) return;
+  [items[i], items[newIdx]] = [items[newIdx], items[i]];
+  renderQuoteTable();
+}
+
+// ===== SortableJS: 드래그 앤 드롭 순서 변경 =====
+let _groupSortable = null;
+const _itemSortables = [];
+
+function _getItemsArray(gid) {
+  if (gid === '__ungrouped__') return ungroupedItems;
+  const g = quoteGroups.find(x => x.id === gid);
+  return g ? g.items : null;
+}
+
+function initSortables() {
+  if (typeof Sortable === 'undefined') return;
+  // 기존 Sortable 인스턴스 정리
+  if (_groupSortable) { try { _groupSortable.destroy(); } catch(e){} _groupSortable = null; }
+  _itemSortables.forEach(s => { try { s.destroy(); } catch(e){} });
+  _itemSortables.length = 0;
+
+  // 그룹 카드 자체 드래그
+  const container = document.getElementById('groups-container');
+  if (container) {
+    _groupSortable = Sortable.create(container, {
+      animation: 150,
+      handle: '.group-drag-handle',
+      draggable: '.group-card',
+      ghostClass: 'sortable-ghost',
+      chosenClass: 'sortable-chosen',
+      dragClass: 'sortable-drag',
+      onEnd: (evt) => {
+        if (evt.oldIndex === evt.newIndex) return;
+        const [moved] = quoteGroups.splice(evt.oldIndex, 1);
+        quoteGroups.splice(evt.newIndex, 0, moved);
+        renderQuoteTable();
+      }
+    });
+  }
+
+  // 각 그룹 내 항목(+ 미그룹 항목) 드래그 — group 옵션으로 그룹 간 이동 허용
+  document.querySelectorAll('tbody.group-items-tbody').forEach(tbody => {
+    const inst = Sortable.create(tbody, {
+      animation: 150,
+      handle: '.item-drag-handle',
+      draggable: 'tr[data-item-idx]',
+      filter: 'tr[data-empty]',
+      group: 'quote-items',
+      ghostClass: 'sortable-ghost',
+      chosenClass: 'sortable-chosen',
+      dragClass: 'sortable-drag',
+      onEnd: (evt) => {
+        const fromGid = evt.from.getAttribute('data-group-id');
+        const toGid   = evt.to.getAttribute('data-group-id');
+        const fromArr = _getItemsArray(fromGid);
+        const toArr   = _getItemsArray(toGid);
+        if (!fromArr || !toArr) { renderQuoteTable(); return; }
+        if (fromGid === toGid && evt.oldIndex === evt.newIndex) return;
+        const [moved] = fromArr.splice(evt.oldIndex, 1);
+        if (moved === undefined) { renderQuoteTable(); return; }
+        toArr.splice(evt.newIndex, 0, moved);
+        renderQuoteTable();
+      }
+    });
+    _itemSortables.push(inst);
+  });
+}
+
 function setActiveGroup(id) {
   if (activeGroupId===id) return;
   activeGroupId = id;
@@ -2015,6 +2126,7 @@ async function saveQuote() {
     setSyncStatus('error', '오프라인 저장');
     alert('견적이 저장되었습니다. (오프라인 모드)');
   }
+  updateCopyQuoteBtnVisibility();
 }
 
 // ===== 엑셀 다운로드 (PDF와 동일한 레이아웃) =====
@@ -3057,6 +3169,20 @@ function copyQuote(e, id) {
   if (modal) modal.classList.add('open');
 }
 
+// 견적 작성 탭 상단의 "견적 복사" 버튼 — 현재 열람/수정 중인 견적을 복사
+function copyCurrentQuote() {
+  if (!editingQuoteId) return;
+  copyQuote(null, editingQuoteId);
+}
+
+// editingQuoteId 유무에 따라 복사 버튼 표시/숨김
+function updateCopyQuoteBtnVisibility() {
+  const btn = document.getElementById('btn-copy-current');
+  if (!btn) return;
+  if (editingQuoteId) btn.classList.add('visible');
+  else btn.classList.remove('visible');
+}
+
 function _buildCopiedQuote(src) {
   const copy = clone(src);
   const newId = Date.now().toString() + Math.random().toString(36).slice(2,5);
@@ -3177,6 +3303,7 @@ function loadQuote(id) {
   renderQuoteTable();
   renderImgSheetPages();
   goToQuoteTab();
+  updateCopyQuoteBtnVisibility();
 }
 
 async function deleteQuote(e, id) {
@@ -3195,6 +3322,7 @@ async function deleteQuote(e, id) {
   // 로컬 캐시도 갱신
   saveHistoryLS(loadHistoryLS().filter(h=>h.id!==id));
   if (editingQuoteId===id) { editingQuoteId=null; imageSheet={layout:'2x2',captionPosition:'top',pageCount:1,images:[]}; }
+  updateCopyQuoteBtnVisibility();
   // onSnapshot이 자동 재렌더
 }
 
