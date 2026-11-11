@@ -12,15 +12,16 @@ service firebase.storage {
     // 허용된 직원 이메일 목록.
     // 직원 추가/퇴사 시 이 목록만 수정 후 콘솔에 재배포(아래 match 블록 변경 없음).
     // ⚠️ firestore.rules 쪽 목록과 동일하게 유지하세요.
+    // ⚠️ 콤마(,) 위치: 마지막 항목 뒤에는 콤마가 없어야 합니다. (추가 시 바로 위 줄 끝에 콤마 추가)
     function isAllowedUser() {
       return request.auth != null && request.auth.token.email in [
-        'kgr.belcom@gmail.com'
-        // 여기에 직원 이메일을 추가하세요.
-        // 콤마(,) 위치 주의: 마지막 항목 뒤에는 콤마가 없어야 합니다.
-        // 예:
-        //   'kgr.belcom@gmail.com',
-        //   'employee1@belcom.co.kr',
-        //   'employee2@belcom.co.kr'
+        'kgr.belcom@gmail.com', // 규리
+        'pjs.belcom@gmail.com', // 박준선
+        'ksj.belcom@gmail.com', // 김성진
+        'bhy.belcom@gmail.com', // 봉하연
+        'sjh.belcom@gmail.com', // 심지현
+        'sjw.belcom@gmail.com', // 심지우
+        'cyh.belcom@gmail.com'  // 차윤호
       ];
     }
 
