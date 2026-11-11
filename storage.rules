@@ -1,0 +1,36 @@
+rules_version = '2';
+
+// 적용 대상: 프로젝트 quote-f7608 의 Storage 버킷 (quote-f7608.firebasestorage.app)
+// 반영 방법: Firebase 콘솔 > Storage > 규칙 탭에 붙여넣고 "게시"
+//
+// 정책: 로그인했고 아래 화이트리스트에 등록된 이메일만 quotes/** 읽기·쓰기 가능.
+// (Firebase 콘솔의 "만들기(가입) 사용 설정"도 꺼서 외부 가입을 차단할 것 — DEPLOY.md ①번 참조.)
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // 허용된 직원 이메일 목록.
+    // 직원 추가/퇴사 시 이 목록만 수정 후 콘솔에 재배포(아래 match 블록 변경 없음).
+    // ⚠️ firestore.rules 쪽 목록과 동일하게 유지하세요.
+    function isAllowedUser() {
+      return request.auth != null && request.auth.token.email in [
+        'kgr.belcom@gmail.com'
+        // 여기에 직원 이메일을 추가하세요.
+        // 콤마(,) 위치 주의: 마지막 항목 뒤에는 콤마가 없어야 합니다.
+        // 예:
+        //   'kgr.belcom@gmail.com',
+        //   'employee1@belcom.co.kr',
+        //   'employee2@belcom.co.kr'
+      ];
+    }
+
+    match /quotes/{allPaths=**} {
+      allow read, write: if isAllowedUser();
+    }
+
+    // 그 외 경로는 명시적으로 거부
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -24,6 +24,10 @@
   } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
   import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject, listAll }
     from "https://www.gstatic.com/firebasejs/10.14.1/firebase-storage.js";
+  import {
+    getAuth, setPersistence, browserSessionPersistence,
+    signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail
+  } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyBI4GLUz7KPZMZrtu94XQ1lijbf8nnVdX8",
@@ -39,11 +43,17 @@
   const db = getFirestore(app, "belcom");
 
   const storage = getStorage(app);
+  const auth = getAuth(app);
+  // 창/탭 닫으면 로그아웃되도록 세션 지속성 사용
+  setPersistence(auth, browserSessionPersistence).catch(e => console.error('[Auth] persistence error:', e));
+
   // 일반 inline script에서 사용할 수 있도록 window에 노출
   window.fbDb  = db;
   window.fbStorage  = storage;
+  window.fbAuth = auth;
   window.fbFS  = { collection, doc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, orderBy, query, writeBatch };
   window.fbStorageFS = { ref, uploadBytesResumable, getDownloadURL, deleteObject, listAll };
+  window.fbAuthFS = { signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail };
   window.dispatchEvent(new Event('firebase-ready'));
   console.log('[Firebase] 초기화 완료 — database: "belcom"');
 </script>
@@ -307,11 +317,15 @@ tbody.sortable-ghost-container tr.sortable-ghost td{border-top:2px solid #1a3a5c
 .lock-logo{font-size:13px;color:#888;margin-bottom:6px;font-weight:500}
 .lock-title{font-size:20px;font-weight:700;color:#1a3a5c;margin-bottom:4px}
 .lock-subtitle{font-size:12px;color:#aaa;margin-bottom:28px}
-.lock-box input[type=password]{width:100%;padding:11px 14px;border:1.5px solid #cdd2da;border-radius:6px;font-size:14px;font-family:inherit;margin-bottom:10px;text-align:center;letter-spacing:3px}
-.lock-box input[type=password]:focus{outline:none;border-color:#1a3a5c}
+.lock-box input[type=email],.lock-box input[type=password]{width:100%;padding:11px 14px;border:1.5px solid #cdd2da;border-radius:6px;font-size:14px;font-family:inherit;margin-bottom:10px;text-align:center}
+.lock-box input[type=password]{letter-spacing:3px}
+.lock-box input[type=email]:focus,.lock-box input[type=password]:focus{outline:none;border-color:#1a3a5c}
 .lock-btn{width:100%;padding:11px;background:#1a3a5c;color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s}
 .lock-btn:hover{background:#245580}
 .lock-error{color:#dc3545;font-size:12px;margin-top:10px;display:none}
+.lock-reset-link{display:inline-block;margin-top:14px;font-size:12px;color:#1a6fc4;text-decoration:underline;cursor:pointer;background:none;border:none;font-family:inherit;padding:0}
+.lock-reset-link:hover{color:#0d4a8a}
+.lock-reset-link:disabled{color:#888;cursor:default;text-decoration:none}
 /* 동기화 인디케이터 */
 .sync-indicator{display:flex;align-items:center;gap:5px;margin-left:auto;font-size:11px;color:rgba(255,255,255,.75)}
 .sync-dot{width:7px;height:7px;border-radius:50%;background:#5cb85c;flex-shrink:0}
@@ -400,15 +414,19 @@ tbody.sortable-ghost-container tr.sortable-ghost td{border-top:2px solid #1a3a5c
 </head>
 <body>
 
-<!-- 비밀번호 잠금 화면 -->
+<!-- 로그인 잠금 화면 -->
 <div id="lock-screen">
   <div class="lock-box">
     <div class="lock-logo">㈜벨콤</div>
     <div class="lock-title">견적 시스템</div>
-    <div class="lock-subtitle">접속하려면 비밀번호를 입력하세요</div>
-    <input type="password" id="pw-input" placeholder="비밀번호" onkeydown="if(event.key==='Enter')submitPassword()">
-    <button class="lock-btn" onclick="submitPassword()">접속</button>
-    <div class="lock-error" id="pw-error">비밀번호가 일치하지 않습니다</div>
+    <div class="lock-subtitle">직원 계정으로 로그인하세요</div>
+    <input type="email" id="login-email" placeholder="이메일" autocomplete="username"
+      onkeydown="if(event.key==='Enter')document.getElementById('login-pw').focus()">
+    <input type="password" id="login-pw" placeholder="비밀번호" autocomplete="current-password"
+      onkeydown="if(event.key==='Enter')submitLogin()">
+    <button class="lock-btn" id="login-btn" onclick="submitLogin()">로그인</button>
+    <div class="lock-error" id="pw-error"></div>
+    <button type="button" class="lock-reset-link" id="reset-link" onclick="sendResetEmail()">비밀번호 재설정 메일 받기</button>
   </div>
 </div>
 
@@ -802,14 +820,25 @@ const DEFAULT_PRICE_DATA = {
 // ===== Firebase (Modular SDK는 위쪽 <script type="module">에서 초기화됨) =====
 let db = null;
 let fbFS = null;
+let auth = null;
+let fbAuthFS = null;
+
+function _bindFirebaseRefs() {
+  db = window.fbDb; fbFS = window.fbFS;
+  auth = window.fbAuth; fbAuthFS = window.fbAuthFS;
+}
 
 function waitForFirebase() {
   return new Promise(resolve => {
-    if (window.fbDb) { db = window.fbDb; fbFS = window.fbFS; resolve(); return; }
+    if (window.fbDb) { _bindFirebaseRefs(); resolve(); return; }
     window.addEventListener('firebase-ready', () => {
-      db = window.fbDb; fbFS = window.fbFS; resolve();
+      _bindFirebaseRefs(); resolve();
     }, { once: true });
   });
+}
+
+function currentUserEmail() {
+  return (auth && auth.currentUser && auth.currentUser.email) || '';
 }
 
 // Modular API를 compat 스타일로 호출할 수 있게 해주는 얇은 래퍼
@@ -846,29 +875,78 @@ function fsBatch() {
   };
 }
 
-// ===== 비밀번호 보호 =====
-// 비밀번호 변경 시 이 줄을 수정하세요
-const ACCESS_PASSWORD = "bel202302!";
-
-function submitPassword() {
-  const val = document.getElementById('pw-input').value;
-  if (val === ACCESS_PASSWORD) {
-    sessionStorage.setItem('belcom_auth', 'ok');
-    document.getElementById('lock-screen').classList.add('hidden');
-    initApp();
-  } else {
-    document.getElementById('pw-error').style.display = 'block';
-    document.getElementById('pw-input').value = '';
-    setTimeout(() => document.getElementById('pw-input').focus(), 50);
+// ===== 로그인 (Firebase Authentication) =====
+// 계정은 Firebase 콘솔 > Authentication에서 관리합니다.
+async function submitLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pw    = document.getElementById('login-pw').value;
+  const errEl = document.getElementById('pw-error');
+  const btn   = document.getElementById('login-btn');
+  errEl.style.display = 'none';
+  errEl.textContent   = '';
+  if (!email || !pw) {
+    errEl.textContent = '이메일과 비밀번호를 모두 입력하세요.';
+    errEl.style.display = 'block';
+    return;
+  }
+  await waitForFirebase();
+  btn.disabled = true;
+  btn.textContent = '로그인 중...';
+  try {
+    await fbAuthFS.signInWithEmailAndPassword(auth, email, pw);
+    // 이후 onAuthStateChanged가 잠금 해제 + initApp 처리
+  } catch(e) {
+    const code = e && e.code || '';
+    console.error('[Auth] login error:', code);
+    errEl.textContent = (code==='auth/invalid-credential' || code==='auth/wrong-password' ||
+                         code==='auth/user-not-found' || code==='auth/invalid-email')
+      ? '이메일 또는 비밀번호가 올바르지 않습니다.'
+      : (code==='auth/too-many-requests' ? '시도가 많아 일시 차단되었습니다. 잠시 후 다시 시도하세요.'
+      : '로그인에 실패했습니다. (' + (code || 'error') + ')');
+    errEl.style.display = 'block';
+    document.getElementById('login-pw').value = '';
+    setTimeout(() => document.getElementById('login-pw').focus(), 30);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '로그인';
   }
 }
 
-function logout() {
-  sessionStorage.removeItem('belcom_auth');
-  if (priceUnsub) { priceUnsub(); priceUnsub = null; }
-  if (histUnsub)  { histUnsub();  histUnsub  = null; }
-  document.getElementById('lock-screen').classList.remove('hidden');
-  setSyncStatus('idle', '');
+async function logout() {
+  try {
+    if (auth) await fbAuthFS.signOut(auth);
+  } catch(e) {
+    console.error('[Auth] signOut error:', e);
+  }
+  // 이후 onAuthStateChanged가 리스너 해제 + 잠금 화면 복원
+}
+
+async function sendResetEmail() {
+  const link = document.getElementById('reset-link');
+  let email = (document.getElementById('login-email').value || '').trim();
+  if (!email) {
+    email = (prompt('비밀번호를 재설정할 이메일 주소를 입력하세요:') || '').trim();
+  }
+  if (!email) return;
+  await waitForFirebase();
+  try {
+    link.disabled = true;
+    link.textContent = '메일 발송 중...';
+    await fbAuthFS.sendPasswordResetEmail(auth, email);
+    alert('비밀번호 재설정 메일을 보냈습니다.\n받은편지함(및 스팸함)을 확인하세요.');
+  } catch(e) {
+    const code = e && e.code || '';
+    console.error('[Auth] reset error:', code);
+    const msg = (code==='auth/invalid-email')      ? '이메일 형식이 올바르지 않습니다.'
+              : (code==='auth/user-not-found')     ? '등록되지 않은 이메일입니다.'
+              : (code==='auth/missing-email')      ? '이메일을 입력하세요.'
+              : (code==='auth/too-many-requests')  ? '시도가 많아 일시 차단되었습니다. 잠시 후 다시 시도하세요.'
+              : '메일 발송에 실패했습니다. (' + (code || 'error') + ')';
+    alert('오류: ' + msg);
+  } finally {
+    link.disabled = false;
+    link.textContent = '비밀번호 재설정 메일 받기';
+  }
 }
 
 // ===== 동기화 상태 표시 =====
@@ -2136,6 +2214,7 @@ async function saveQuote() {
     .map(im => ({ id: im.id, url: im.url, caption: im.caption||'', storagePath: im.storagePath||'', pageIndex: im.pageIndex||0, cellIndex: im.cellIndex||0, split: im.split||null }));
   // 기존 견적 수정 시 notProceeded 상태 보존
   const prevEntry = editingQuoteId ? quoteHistory.find(h => h.id === editingQuoteId) : null;
+  const email = currentUserEmail();
   const entry = {
     id:      newId,
     client,  project: document.getElementById('inp-project').value.trim(),
@@ -2147,6 +2226,8 @@ async function saveQuote() {
     imageSheet: { layout: imageSheet.layout, captionPosition: imageSheet.captionPosition, sheetName: imageSheet.sheetName||'이미지 시트', pageCount: imageSheet.pageCount||1, images: savedImages, cellSplits: imageSheet.cellSplits || {} },
     supply: sup, tax, total: sup+tax,
     notProceeded: prevEntry ? !!prevEntry.notProceeded : false,
+    createdBy: prevEntry ? (prevEntry.createdBy || '') : email,
+    updatedBy: email,
     savedAt: new Date().toISOString()
   };
   setSyncStatus('syncing');
@@ -3353,6 +3434,9 @@ function _buildCopiedQuote(src) {
   copy.taxInvoiceIssued = false;
   copy.taxInvoiceIssuedDate = null;
   copy.notProceeded = false;
+  const email = currentUserEmail();
+  copy.createdBy = email;
+  copy.updatedBy = email;
   copy.savedAt = new Date().toISOString();
   // 그룹 ID 재발급 (충돌 방지)
   if (Array.isArray(copy.groups)) {
@@ -3496,13 +3580,33 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// ===== 시작: 인증 상태에 따라 진입 분기 =====
-if (sessionStorage.getItem('belcom_auth') === 'ok') {
-  document.getElementById('lock-screen').classList.add('hidden');
-  initApp();
-} else {
-  setTimeout(() => document.getElementById('pw-input').focus(), 100);
-}
+// ===== 시작: Firebase Auth 상태 변화에 따라 진입/퇴장 분기 =====
+let _appInitialized = false;
+(async () => {
+  await waitForFirebase();
+  fbAuthFS.onAuthStateChanged(auth, user => {
+    const lock = document.getElementById('lock-screen');
+    if (user) {
+      // 로그인됨 → 앱 진입
+      lock.classList.add('hidden');
+      if (!_appInitialized) {
+        _appInitialized = true;
+        initApp();
+      }
+    } else {
+      // 로그아웃 상태 → 리스너 해제 후 잠금 화면
+      if (priceUnsub) { priceUnsub(); priceUnsub = null; }
+      if (histUnsub)  { histUnsub();  histUnsub  = null; }
+      _appInitialized = false;
+      lock.classList.remove('hidden');
+      setSyncStatus('idle', '');
+      setTimeout(() => {
+        const em = document.getElementById('login-email');
+        if (em) em.focus();
+      }, 50);
+    }
+  });
+})();
 </script>
 </body>
 </html>

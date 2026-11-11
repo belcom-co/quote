@@ -1,5 +1,6 @@
 # 백업 파일
 *.backup
+*.backup_*
 *.bak
 
 # OS
@@ -11,11 +12,19 @@ desktop.ini
 .vscode/
 .idea/
 *.swp
+.claude/
 
 # 임시/메모
 hello.txt
 hello2.txt
 클로드코드 명령어.txt
+
+# 다른 워크스페이스 (이 repo에 커밋 금지)
+belcom-analytics/
+벨콤 그로우-API 키/
+
+# Firebase/배포 관련 보조 설정
+cors.json
 
 # 로그
 *.log

@@ -10,8 +10,8 @@
 
 ### 접속 방법
 1. 위의 접속 주소를 브라우저로 엽니다.
-2. 비밀번호 입력창이 나타나면 비밀번호를 입력 후 **접속** 버튼을 누릅니다.
-3. (브라우저 창을 닫으면 다음 접속 시 다시 비밀번호 입력이 필요합니다.)
+2. 본인에게 발급된 **이메일**과 **비밀번호**를 입력 후 **로그인** 버튼을 누릅니다.
+3. (브라우저 창을 닫으면 다음 접속 시 다시 로그인이 필요합니다.)
 
 ### 주요 기능
 - **견적 작성**: 좌측 카테고리에서 항목을 선택하고 수량을 입력해 견적서 작성
@@ -29,32 +29,39 @@
 
 ## 관리자 가이드
 
-### 비밀번호 변경
-1. `index.html` 파일을 열고 `ACCESS_PASSWORD` 검색
-2. 다음 줄의 값을 새 비밀번호로 변경:
-   ```js
-   // 비밀번호 변경 시 이 줄을 수정하세요
-   const ACCESS_PASSWORD = "새비밀번호";
-   ```
-3. 저장 후 `git add . && git commit -m "비밀번호 변경" && git push`
+### 직원 계정 추가/삭제 (Firebase Authentication)
+1. Firebase 콘솔 접속: https://console.firebase.google.com/project/quote-f7608
+2. 좌측 메뉴 **Authentication** → **Users** 탭
+3. **사용자 추가** 버튼 → 이메일·비밀번호 입력
+4. 퇴사·삭제: 해당 사용자 우측 메뉴 → **사용자 삭제**
+5. 비밀번호 재설정: 사용자 우측 메뉴 → **비밀번호 재설정** (해당 이메일로 재설정 링크 발송)
+
+> 비밀번호는 **코드에 적혀 있지 않습니다**. Firebase가 안전하게 보관하므로 여기 콘솔에서만 관리하세요.
 
 ### Firebase 콘솔 접속
 - 프로젝트 콘솔: https://console.firebase.google.com/project/quote-f7608
 - Firestore 데이터 확인: 콘솔 > **Firestore Database** > **데이터** 탭
 - 컬렉션 구조:
   - `pricelist/{카테고리키}` — 단가표 (description, items 배열, _order)
-  - `quotes/{견적ID}` — 견적 이력 (client, project, date, items, supply, tax, total, savedAt, note)
+  - `quotes/{견적ID}` — 견적 이력 (client, project, date, items, supply, tax, total, savedAt, createdBy, updatedBy, note)
 
 ### 단가표 백업
 - 단가표 관리 탭 > **엑셀 내보내기** 버튼으로 언제든 백업 파일 다운로드 가능
 
 ### 업데이트 (코드 수정 후 배포)
+`git add .` 로 뭉뚱그리지 말고 **바뀐 파일만 명시**해서 추가하세요. (다른 워크스페이스/임시 파일 실수 커밋 방지)
+
 ```bash
-git add .
+git status                              # 어떤 파일이 바뀌었는지 먼저 확인
+git add index.html README.md            # 예: 바뀐 파일만 골라서 추가
 git commit -m "수정 내용 요약"
 git push
 ```
 GitHub Pages가 자동으로 1~2분 내에 배포 완료합니다.
+
+### 보안 규칙 변경
+`firestore.rules` / `storage.rules` 파일을 수정한 뒤에는 **Firebase 콘솔에 붙여넣고 "게시"** 해야 반영됩니다. (저장소에 파일만 바꿔서는 적용되지 않음.)
+자세한 순서는 `DEPLOY.md` 참고.
 
 ---
 
@@ -63,9 +70,10 @@ GitHub Pages가 자동으로 1~2분 내에 배포 완료합니다.
 - **데이터베이스**: Firebase Firestore (실시간 동기화)
 - **엑셀 라이브러리**: SheetJS (단가표), ExcelJS (견적서 + 로고)
 - **호스팅**: GitHub Pages
-- **인증**: 클라이언트 측 비밀번호 (sessionStorage)
+- **인증**: Firebase Authentication (이메일/비밀번호, 세션 지속성)
 
 ## 보안 안내
-- 비밀번호는 클라이언트 코드에 평문으로 저장되어 있으므로 **외부에 URL을 공개하지 마세요**.
+- 로그인은 **Firebase Authentication**이 처리하며, 비밀번호는 코드에 저장되지 않습니다.
+- Firestore/Storage 데이터는 보안 규칙(`request.auth != null`)으로 보호되므로, 로그인 없이 접근할 수 없습니다.
 - 검색엔진 색인 차단(`noindex, nofollow`) 메타 태그가 적용되어 있습니다.
-- 민감 데이터(고객사 정보 등)는 Firestore 보안 규칙으로 추가 보호됩니다.
+- `firebaseConfig` 의 `apiKey` 는 공개돼도 되는 값입니다(규칙으로 보호).
