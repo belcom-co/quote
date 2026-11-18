@@ -295,6 +295,13 @@ tr.expense-row:hover td{background:#fff5d6}
 .sortable-drag{opacity:.9;box-shadow:0 6px 18px rgba(26,58,92,.25)}
 .group-card.sortable-ghost{opacity:.35}
 tbody.sortable-ghost-container tr.sortable-ghost td{border-top:2px solid #1a3a5c !important}
+/* VAT 포함 모드 토글 */
+.vat-toggle{display:flex;align-items:center;gap:5px;font-size:12px;color:#444;cursor:pointer;user-select:none;padding:4px 10px;border:1px solid #cdd2da;border-radius:4px;background:#fff;white-space:nowrap;transition:all .12s}
+.vat-toggle:hover{background:#f6f7f9;border-color:#9ca3af}
+.vat-toggle input{cursor:pointer;width:14px;height:14px;accent-color:#1a3a5c}
+.vat-toggle.on{background:#fff8e1;border-color:#e0b020;color:#7a5200;font-weight:600}
+.vat-badge{display:inline-flex;align-items:center;gap:4px;background:#fff3cd;color:#856404;border:1px solid #e0b020;border-radius:4px;padding:3px 10px;font-size:11px;font-weight:600;margin-left:8px}
+.vat-badge::before{content:'ⓘ';font-size:13px;font-weight:700}
 /* 복사 버튼 (견적 작성 상단) */
 .btn-copy-quote{display:none;background:#5a7ba5;color:#fff;padding:5px 12px;border-radius:4px;border:none;cursor:pointer;font-size:12px;font-family:inherit;font-weight:500;align-items:center;gap:4px;transition:background .15s}
 .btn-copy-quote:hover{background:#4a6a90}
@@ -454,6 +461,10 @@ tbody.sortable-ghost-container tr.sortable-ghost td{border-top:2px solid #1a3a5c
     <div><label>수신처</label><input type="text" id="inp-client" placeholder="예: 현두상사"></div>
     <div><label>프로젝트명</label><input type="text" id="inp-project" placeholder="프로젝트명 입력"></div>
     <div><label>견적일자</label><input type="date" id="inp-date"></div>
+    <label class="vat-toggle" id="vat-toggle-label" title="단가 입력을 VAT 포함 금액 기준으로 전환">
+      <input type="checkbox" id="inp-vat-included" onchange="onVatToggleChange(this)">
+      VAT 포함 금액으로 입력
+    </label>
     <button type="button" class="btn-copy-quote" id="btn-copy-current" onclick="copyCurrentQuote()" style="margin-left:auto" title="현재 견적 복사">견적 복사</button>
   </div>
   <div class="quote-body">
@@ -554,8 +565,11 @@ tbody.sortable-ghost-container tr.sortable-ghost td{border-top:2px solid #1a3a5c
   <div class="price-toolbar">
     <h2>단가표 관리</h2>
     <button class="btn btn-primary" onclick="addCategory()">+ 새 카테고리</button>
-    <button class="btn btn-secondary" onclick="exportPriceExcel()">엑셀 내보내기</button>
-    <label class="btn btn-secondary" style="cursor:pointer">엑셀 가져오기<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importPriceExcel(event)"></label>
+    <button class="btn btn-success" onclick="downloadPriceUploadTemplate()" title="신규 항목 추가 전용 엑셀 양식 다운로드">양식 다운로드</button>
+    <label class="btn btn-success" style="cursor:pointer" title="양식 파일로 신규 항목만 추가 (기존 데이터 유지)">추가 업로드<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importPriceAppend(event)"></label>
+    <span style="width:1px;height:20px;background:#d0d5dc;margin:0 4px"></span>
+    <button class="btn btn-secondary" onclick="exportPriceExcel()">전체 다운로드</button>
+    <label class="btn btn-secondary" style="cursor:pointer" title="전체 단가표를 업로드 파일로 교체 (덮어쓰기)">전체 업로드 (덮어쓰기)<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importPriceExcel(event)"></label>
   </div>
   <div class="price-body">
     <aside class="price-sidebar" id="price-sidebar">
@@ -975,6 +989,7 @@ const LS_HISTORY = 'belcom_history_v1';
 let quoteGroups    = [];   // v2: [{id, name, subLabel, showSubtotal, items}]
 let ungroupedItems = [];   // v1 호환: 그룹 미지정 항목
 let activeGroupId  = null; // 항목 추가 대상 그룹
+let vatIncluded    = false; // VAT 포함 모드: 입력 단가가 VAT 포함 금액인지 여부
 // v3: 이미지 시트
 let imageSheet = { layout: '2x2', captionPosition: 'top', sheetName: '이미지 시트', pageCount: 1, images: [], cellSplits: {} };
 const IS_LAYOUTS = {
@@ -988,6 +1003,47 @@ function fmt(n)   { return Number(n||0).toLocaleString('ko-KR'); }
 function esc(s)   { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function today()  { return new Date().toISOString().split('T')[0]; }
 function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+// ===== VAT 계산 공통 =====
+// vatMode === true  : 입력 price가 VAT 포함 단가 → 공급가액 역산
+// vatMode === false : 입력 price가 공급단가(공급가액 기준) → 세액을 더해 합계 산출
+function calcRow(item, vatMode) {
+  const price = Number(item && item.price) || 0;
+  const qty   = Number(item && item.qty)   || 0;
+  if (vatMode) {
+    const total  = qty * price;
+    const supply = Math.round(total / 1.1);
+    const tax    = total - supply;
+    return { supply, tax, total };
+  }
+  const supply = qty * price;
+  const tax    = Math.round(supply * 0.1);
+  return { supply, tax, total: supply + tax };
+}
+
+function hasAnyQuoteItems() {
+  if (quoteGroups.some(g => (g.items || []).length)) return true;
+  return (ungroupedItems || []).length > 0;
+}
+
+function syncVatToggleUI() {
+  const cb = document.getElementById('inp-vat-included');
+  const lbl = document.getElementById('vat-toggle-label');
+  if (cb) cb.checked = !!vatIncluded;
+  if (lbl) lbl.classList.toggle('on', !!vatIncluded);
+}
+
+function onVatToggleChange(cb) {
+  const next = !!(cb && cb.checked);
+  if (next === vatIncluded) return;
+  if (hasAnyQuoteItems()) {
+    const ok = confirm('VAT 모드를 변경하면 기존 항목의 단가 계산이 바뀝니다. 계속하시겠습니까?');
+    if (!ok) { cb.checked = vatIncluded; return; }
+  }
+  vatIncluded = next;
+  syncVatToggleUI();
+  renderQuoteTable();
+}
 
 // ===== 로고 로드 =====
 function loadLogoAsBase64() {
@@ -1253,8 +1309,13 @@ function addItemToQuote() {
 function renderQuoteTable() {
   const container = document.getElementById('groups-container');
 
+  // VAT 포함 모드 뱃지 (내역 상단에만 표시)
+  const vatBadgeHtml = vatIncluded
+    ? '<div style="padding:8px 14px;background:#fff8e1;border-bottom:1px solid #e8d08a"><span class="vat-badge">VAT 포함 금액 기준 입력 — 공급가액은 자동 역산</span></div>'
+    : '';
+
   if (!quoteGroups.length && !ungroupedItems.length) {
-    container.innerHTML = '<div class="empty-msg">+ 새 그룹 추가를 눌러 그룹을 만든 후<br>좌측에서 항목을 선택해 추가하세요</div>';
+    container.innerHTML = vatBadgeHtml + '<div class="empty-msg">+ 새 그룹 추가를 눌러 그룹을 만든 후<br>좌측에서 항목을 선택해 추가하세요</div>';
     updateTotals(); updateActiveGroupHint(); updateCopyQuoteBtnVisibility(); return;
   }
 
@@ -1276,8 +1337,7 @@ function renderQuoteTable() {
     if (!items.length) return `<tr data-empty="1"><td colspan="11" class="empty-msg" style="padding:12px">이 그룹을 선택 후 좌측에서 항목을 추가하세요</td></tr>`;
     const last = items.length - 1;
     return items.map((item, i) => {
-      const sup = item.qty * item.price;
-      const tax = Math.round(sup * 0.1);
+      const { supply: sup, tax } = calcRow(item, vatIncluded);
       const key = gid + '_' + i;
       return `<tr${item.isExpense?' class="expense-row"':''} data-item-idx="${i}">
       <td class="td-drag"><span class="drag-handle item-drag-handle" title="드래그로 이동">≡</span></td>
@@ -1298,10 +1358,10 @@ function renderQuoteTable() {
     }).join('');
   };
 
-  let html = quoteGroups.map((grp, gi) => {
+  let html = vatBadgeHtml + quoteGroups.map((grp, gi) => {
     const isActive = grp.id === activeGroupId;
-    const sub    = grp.items.reduce((s,it) => s + it.qty*it.price, 0);
-    const subTax = Math.round(sub * 0.1);
+    let sub = 0, subTax = 0;
+    grp.items.forEach(it => { const r = calcRow(it, vatIncluded); sub += r.supply; subTax += r.tax; });
     return `<div class="group-card${isActive?' active':''}" data-group-id="${grp.id}">
   <div class="group-card-header" onclick="setActiveGroup('${grp.id}')">
     <span class="group-drag-handle" onclick="event.stopPropagation()" title="그룹 드래그로 이동">⋮⋮</span>
@@ -1352,8 +1412,7 @@ function updateGroupItem(gid, i, field, val) {
   if (!items[i]) return;
   items[i][field] = (field==='qty'||field==='price') ? (parseFloat(val)||0) : val;
   if (field==='qty'||field==='price') {
-    const sup = items[i].qty * items[i].price;
-    const tax = Math.round(sup * 0.1);
+    const { supply: sup, tax } = calcRow(items[i], vatIncluded);
     const key = gid + '_' + i;
     const supEl = document.querySelector(`[data-sup="${key}"]`);
     const taxEl = document.querySelector(`[data-tax="${key}"]`);
@@ -1362,8 +1421,8 @@ function updateGroupItem(gid, i, field, val) {
     if (gid !== '__ungrouped__') {
       const grp = quoteGroups.find(g=>g.id===gid);
       if (grp && grp.showSubtotal) {
-        const sub = grp.items.reduce((s,it)=>s+it.qty*it.price,0);
-        const subTax = Math.round(sub*0.1);
+        let sub = 0, subTax = 0;
+        grp.items.forEach(it => { const r = calcRow(it, vatIncluded); sub += r.supply; subTax += r.tax; });
         const stEl = document.querySelector(`[data-subtotal="${gid}"]`);
         if (stEl) stEl.textContent = `소계: 공급가액 ${fmt(sub)}원 \xa0/\xa0 세액 ${fmt(subTax)}원 \xa0/\xa0 합계 ${fmt(sub+subTax)}원`;
       }
@@ -1380,8 +1439,8 @@ function deleteGroupItem(gid, i) {
 
 function updateTotals() {
   let sup = 0, tax = 0;
-  quoteGroups.forEach(grp => grp.items.forEach(it => { const s=it.qty*it.price; sup+=s; tax+=Math.round(s*0.1); }));
-  ungroupedItems.forEach(it => { const s=it.qty*it.price; sup+=s; tax+=Math.round(s*0.1); });
+  quoteGroups.forEach(grp => grp.items.forEach(it => { const r = calcRow(it, vatIncluded); sup += r.supply; tax += r.tax; }));
+  ungroupedItems.forEach(it => { const r = calcRow(it, vatIncluded); sup += r.supply; tax += r.tax; });
   document.getElementById('total-supply').textContent = fmt(sup);
   document.getElementById('total-tax').textContent    = fmt(tax);
   document.getElementById('total-grand').textContent  = fmt(sup+tax);
@@ -2042,11 +2101,13 @@ function syncImgSheetUI() {
 function clearQuote() {
   if (!confirm('견적 내역을 초기화하시겠습니까?')) return;
   quoteGroups=[]; ungroupedItems=[]; activeGroupId=null; editingQuoteId=null;
+  vatIncluded = false;
   imageSheet = { layout: '2x2', captionPosition: 'top', sheetName: '이미지 시트', pageCount: 1, images: [], cellSplits: {} };
   document.getElementById('inp-client').value  = '';
   document.getElementById('inp-project').value = '';
   document.getElementById('inp-date').value    = today();
   document.getElementById('inp-note').value    = DEFAULT_NOTE;
+  syncVatToggleUI();
   renderQuoteTable();
   renderImgSheetPages();
 }
@@ -2205,8 +2266,8 @@ async function saveQuote() {
   if (!client) { alert('수신처를 입력하세요.'); return; }
   const allItems = getAllItems();
   if (!allItems.length) { alert('견적 항목이 없습니다.'); return; }
-  const sup = allItems.reduce((s,it)=>s+it.qty*it.price, 0);
-  const tax = allItems.reduce((s,it)=>s+Math.round(it.qty*it.price*0.1), 0);
+  const sup = allItems.reduce((s,it)=>s + calcRow(it, vatIncluded).supply, 0);
+  const tax = allItems.reduce((s,it)=>s + calcRow(it, vatIncluded).tax,    0);
   const newId = editingQuoteId || Date.now().toString();
   // 이미지 시트: 저장 가능한 데이터만 추출 (uploading/error 제외)
   const savedImages = imageSheet.images
@@ -2223,6 +2284,7 @@ async function saveQuote() {
     version: 3,
     groups:  clone(quoteGroups),
     ungroupedItems: clone(ungroupedItems),
+    vatIncluded: !!vatIncluded,
     imageSheet: { layout: imageSheet.layout, captionPosition: imageSheet.captionPosition, sheetName: imageSheet.sheetName||'이미지 시트', pageCount: imageSheet.pageCount||1, images: savedImages, cellSplits: imageSheet.cellSplits || {} },
     supply: sup, tax, total: sup+tax,
     notProceeded: prevEntry ? !!prevEntry.notProceeded : false,
@@ -2264,8 +2326,8 @@ async function exportExcel() {
   const project  = document.getElementById('inp-project').value || '';
   const date     = document.getElementById('inp-date').value;
   const noteText = document.getElementById('inp-note').value;
-  const sup = allItems.reduce((s,it)=>s+it.qty*it.price,0);
-  const tax = allItems.reduce((s,it)=>s+Math.round(it.qty*it.price*0.1),0);
+  const sup = allItems.reduce((s,it)=>s + calcRow(it, vatIncluded).supply, 0);
+  const tax = allItems.reduce((s,it)=>s + calcRow(it, vatIncluded).tax,    0);
   const total = sup + tax;
 
   const wb = new ExcelJS.Workbook();
@@ -2379,6 +2441,19 @@ async function exportExcel() {
   tot.border    = allBorder('medium','FF1A3A5C');
   R++;
 
+  // ━━━ 5-1. VAT 포함 안내 (VAT 포함 모드일 때만) ━━━
+  if (vatIncluded) {
+    ws.getRow(R).height = 18;
+    merge(`A${R}:G${R}`);
+    const vc = cell(`A${R}`);
+    vc.value     = '※ 단가는 VAT 포함 금액 기준입니다';
+    vc.font      = font('맑은 고딕', 9, true, 'FF856404');
+    vc.alignment = align('center');
+    vc.fill      = fill('FFFFF3CD');
+    vc.border    = allBorder('thin','FFE0B020');
+    R++;
+  }
+
   // ━━━ 6. 공백 ━━━
   ws.getRow(R).height = 6; R++;
 
@@ -2405,7 +2480,7 @@ async function exportExcel() {
   // ━━━ 8. 항목 rows (그룹 구조 반영) ━━━
   const thinBorder = allBorder('thin','FFCCCCCC');
   const writeItemRow = (it, no) => {
-    const s = it.qty*it.price, t = Math.round(s*0.1);
+    const { supply: s, tax: t } = calcRow(it, vatIncluded);
     const vals = [no, it.name, `${it.qty}${it.unit}`, it.price, s, t, it.note||''];
     ws.getRow(R).height = 18;
     COLS.forEach((col,ci) => {
@@ -2437,7 +2512,7 @@ async function exportExcel() {
 
       let gSup = 0, gTax = 0;
       grp.items.forEach((it, i) => {
-        const {s,t} = writeItemRow(it, i+1);
+        const {s, t} = writeItemRow(it, i+1);
         gSup += s; gTax += t;
       });
 
@@ -2667,8 +2742,8 @@ async function printQuote() {
   const client = document.getElementById('inp-client').value || '(미입력)';
   const project = document.getElementById('inp-project').value || '';
   const date = document.getElementById('inp-date').value;
-  const sup = allItems.reduce((s,it)=>s+it.qty*it.price,0);
-  const tax = allItems.reduce((s,it)=>s+Math.round(it.qty*it.price*0.1),0);
+  const sup = allItems.reduce((s,it)=>s + calcRow(it, vatIncluded).supply, 0);
+  const tax = allItems.reduce((s,it)=>s + calcRow(it, vatIncluded).tax,    0);
   const noteText = document.getElementById('inp-note').value;
   const noteLines = noteText.split('\n').filter(l=>l.trim()).map(l=>`<div>${l}</div>`).join('');
   const S = (s) => `style="${s}"`;
@@ -2676,7 +2751,7 @@ async function printQuote() {
   const P = 'padding:5px 8px;';
 
   const makeItemRow = (it, no) => {
-    const s=it.qty*it.price, t=Math.round(s*0.1);
+    const { supply: s, tax: t } = calcRow(it, vatIncluded);
     const bg = it.isExpense ? 'background:#fffbee;' : '';
     return `<tr>
       <td ${S(B+P+'text-align:center;'+bg)}>${no}</td>
@@ -2697,8 +2772,9 @@ async function printQuote() {
       rows += `<tr><td colspan="7" ${S('border:1px solid #aaa;padding:6px 10px;background:#e8eef5;font-weight:700;color:#1a3a5c;')}>${hdrTxt}</td></tr>`;
       let gSup = 0, gTax = 0;
       grp.items.forEach((it, i) => {
-        gSup += it.qty*it.price;
-        gTax += Math.round(it.qty*it.price*0.1);
+        const r = calcRow(it, vatIncluded);
+        gSup += r.supply;
+        gTax += r.tax;
         rows += makeItemRow(it, i+1);
       });
       if (grp.showSubtotal) rows += `<tr style="background:#f5f5f5;font-weight:700">
@@ -2751,9 +2827,10 @@ async function printQuote() {
     </tr>
   </table>
   <p style="margin:12px 0 10px">아래와 같이 견적합니다.</p>
-  <div style="font-size:13pt;font-weight:700;text-align:center;border:2px solid #000;padding:9px;margin-bottom:14px">
+  <div style="font-size:13pt;font-weight:700;text-align:center;border:2px solid #000;padding:9px;margin-bottom:${vatIncluded?'6px':'14px'}">
     합계금액 (공급가액 + 세액) &nbsp;: &nbsp;<span style="color:#c0392b">${fmt(sup+tax)}</span> 원
   </div>
+  ${vatIncluded ? '<div style="text-align:center;font-size:9.5pt;font-weight:700;color:#856404;background:#fff3cd;border:1px solid #e0b020;padding:5px 10px;margin-bottom:14px">※ 단가는 VAT 포함 금액 기준입니다</div>' : ''}
   <table style="width:100%;border-collapse:collapse;font-size:9.5pt">
     <thead>
       <tr style="background:#f0f2f5">
@@ -3037,6 +3114,117 @@ function importPriceExcel(e) {
       renderPriceTab(); renderCategorySelect(); renderItemList();
       saveAllPriceToFS().then(() => alert('단가표를 가져왔습니다.'));
     } catch(err) { alert('파일을 읽을 수 없습니다.\n' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+  e.target.value = '';
+}
+
+// ===== 단가표 추가 업로드 (append-only) =====
+const APPEND_UPLOAD_HEADER = ['카테고리','품명','단위','단가','비고'];
+
+function downloadPriceUploadTemplate() {
+  const aoa = [
+    APPEND_UPLOAD_HEADER.slice(),
+    ['패키지_제작', '신규 박스 디자인', '건', 300000, '신규 클라이언트용'],
+    ['상세페이지_제작', '추가 섹션 작업', '건', 100000, '섹션당 가격']
+  ];
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch:22},{wch:40},{wch:10},{wch:14},{wch:30}];
+  XLSX.utils.book_append_sheet(wb, ws, '추가업로드');
+  XLSX.writeFile(wb, '단가표_업로드_양식.xlsx');
+}
+
+function _normalizeHeaderCell(v) {
+  return String(v == null ? '' : v).trim().replace(/\s+/g,'');
+}
+
+function _validateAppendHeader(headerRow) {
+  if (!headerRow || headerRow.length < APPEND_UPLOAD_HEADER.length) return false;
+  for (let i = 0; i < APPEND_UPLOAD_HEADER.length; i++) {
+    if (_normalizeHeaderCell(headerRow[i]) !== _normalizeHeaderCell(APPEND_UPLOAD_HEADER[i])) return false;
+  }
+  return true;
+}
+
+function importPriceAppend(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const wb = XLSX.read(ev.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if (!rows.length) { alert('데이터가 없습니다.'); return; }
+
+      // 헤더 검증
+      if (!_validateAppendHeader(rows[0])) {
+        alert('양식이 올바르지 않습니다. 양식을 다시 다운로드해주세요.\n\n필요한 헤더: ' + APPEND_UPLOAD_HEADER.join(' | '));
+        return;
+      }
+      if (rows.length < 2) { alert('헤더만 있고 데이터 행이 없습니다.'); return; }
+
+      // 작업용 사본 (중복 체크 시점이 "업로드 직전"이므로 priceData 기준으로 수행)
+      const working = clone(priceData);
+      const affectedCats = new Set();
+      let added = 0, dupSkip = 0, errSkip = 0;
+
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i] || [];
+        const cat  = String(r[0] == null ? '' : r[0]).trim();
+        const name = String(r[1] == null ? '' : r[1]).trim();
+        const unit = String(r[2] == null ? '' : r[2]).trim() || '건';
+        const priceRaw = r[3];
+        const note = String(r[4] == null ? '' : r[4]).trim();
+
+        // 완전히 빈 행은 조용히 건너뛴다
+        if (!cat && !name && (priceRaw === '' || priceRaw == null) && !note) continue;
+
+        // 필수 누락 또는 단가 숫자 아님 → 오류 스킵
+        if (!cat || !name) { errSkip++; continue; }
+        const priceNum = parseFloat(priceRaw);
+        if (!isFinite(priceNum) || priceRaw === '' || priceRaw == null) { errSkip++; continue; }
+
+        // 카테고리 자동 생성
+        if (!working[cat]) {
+          working[cat] = { description: '', items: [] };
+        }
+
+        // 중복 체크: 같은 카테고리 + 같은 품명 (대소문자/공백 무시)
+        const normName = name.replace(/\s+/g,'').toLowerCase();
+        const dup = (working[cat].items || []).some(it =>
+          String(it.name || '').replace(/\s+/g,'').toLowerCase() === normName
+        );
+        if (dup) { dupSkip++; continue; }
+
+        working[cat].items.push({ name, unit, price: priceNum, note, source: '' });
+        affectedCats.add(cat);
+        added++;
+      }
+
+      if (!added) {
+        alert(`업로드 완료:\n- 신규 추가: 0개\n- 중복 스킵: ${dupSkip}개\n- 오류 스킵: ${errSkip}개\n\n추가된 항목이 없습니다.`);
+        return;
+      }
+
+      priceData = working;
+      savePriceLS();
+      renderPriceTab(); renderCategorySelect(); renderItemList();
+
+      // Firestore에 영향받은 카테고리만 저장
+      Promise.all(Array.from(affectedCats).map(c => saveCategoryToFS(c)))
+        .then(() => {
+          alert(`업로드 완료:\n- 신규 추가: ${added}개\n- 중복 스킵: ${dupSkip}개\n- 오류 스킵: ${errSkip}개`);
+        })
+        .catch(err => {
+          console.error('Price append save error:', err);
+          alert(`업로드 완료 (일부 저장 오류):\n- 신규 추가: ${added}개\n- 중복 스킵: ${dupSkip}개\n- 오류 스킵: ${errSkip}개\n\n네트워크 오류로 Firestore 동기화가 지연될 수 있습니다.`);
+        });
+    } catch(err) {
+      console.error('Price append parse error:', err);
+      alert('파일을 읽을 수 없습니다.\n' + (err && err.message ? err.message : err));
+    }
   };
   reader.readAsArrayBuffer(file);
   e.target.value = '';
@@ -3497,6 +3685,8 @@ function loadCopiedQuoteIntoEditor(copied) {
   document.getElementById('inp-project').value = copied.project || '';
   document.getElementById('inp-date').value    = copied.date || today();
   document.getElementById('inp-note').value    = copied.note || DEFAULT_NOTE;
+  vatIncluded = !!copied.vatIncluded;
+  syncVatToggleUI();
   quoteGroups    = clone(copied.groups || []);
   ungroupedItems = clone(copied.ungroupedItems || []);
   if (copied.imageSheet) {
@@ -3528,6 +3718,9 @@ function loadQuote(id) {
   document.getElementById('inp-project').value = entry.project||'';
   document.getElementById('inp-date').value    = entry.date;
   document.getElementById('inp-note').value    = entry.note || DEFAULT_NOTE;
+  // 하위 호환: vatIncluded 필드 없으면 false
+  vatIncluded = !!entry.vatIncluded;
+  syncVatToggleUI();
   if (entry.version >= 2) {
     quoteGroups    = clone(entry.groups || []);
     ungroupedItems = clone(entry.ungroupedItems || []);
