@@ -209,13 +209,16 @@ tbody tr:hover td{background:#fafbfd}
 .history-list{display:flex;flex-direction:column;gap:8px}
 .history-item{background:#fff;border:1px solid #e0e4ea;border-radius:6px;padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .15s}
 .history-item:hover{border-color:#1a3a5c;background:#f0f4ff}
-.history-meta{flex:1}
+.history-meta{flex:1;min-width:0}
 .h-client{font-weight:700;font-size:14px;color:#1a3a5c}
 .h-project{font-size:12px;color:#666;margin-top:2px}
 .h-date{font-size:11px;color:#999;margin-top:2px}
-.history-amount{font-size:15px;font-weight:700;color:#c0392b;white-space:nowrap}
+.history-amount{font-size:15px;font-weight:700;color:#c0392b;white-space:nowrap;width:150px;text-align:right;flex-shrink:0}
 /* 세금계산서 */
-.history-tax{display:flex;flex-direction:column;gap:4px;align-items:flex-start;min-width:150px;padding:0 8px;border-left:1px solid #e8ecf2;border-right:1px solid #e8ecf2}
+.history-tax{display:flex;flex-direction:column;gap:4px;align-items:flex-start;width:160px;flex-shrink:0;padding:0 8px;border-left:1px solid #e8ecf2;border-right:1px solid #e8ecf2;box-sizing:border-box}
+.history-actions{display:flex;align-items:center;gap:6px;justify-content:flex-end;width:260px;flex-shrink:0}
+.history-actions .btn{flex-shrink:0}
+.history-actions .is-hidden{visibility:hidden}
 .history-tax label{display:flex;align-items:center;gap:5px;font-size:11px;color:#555;cursor:pointer;user-select:none;white-space:nowrap}
 .history-tax input[type=checkbox]{cursor:pointer;width:14px;height:14px;accent-color:#2a7a3a}
 .history-tax input[type=date]{font-size:11px;font-family:inherit;padding:2px 4px;border:1px solid #cdd2da;border-radius:3px;width:132px}
@@ -232,17 +235,19 @@ tbody tr:hover td{background:#fafbfd}
 /* 미진행 견적 */
 .history-item.not-proceeded{background:#eeeeee;border-color:#cfcfcf}
 .history-item.not-proceeded:hover{background:#e3e3e3;border-color:#9a9a9a}
-.history-item.not-proceeded .history-tax{display:none}
+.history-item.not-proceeded .history-tax{visibility:hidden}
 .np-badge{display:inline-block;background:#8a8a8a;color:#fff;font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;margin-right:6px;letter-spacing:.3px;vertical-align:middle}
-.pay-badge{display:inline-block;background:#3a6fc8;color:#fff;font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;margin-right:6px;letter-spacing:.3px;vertical-align:middle}
+.pay-badge{display:inline-block;background:#2563eb;color:#fff;font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;margin-right:6px;letter-spacing:.3px;vertical-align:middle}
+.btn-copy{background:#6b7280;color:#fff;border:1px solid #4b5563}
+.btn-copy:hover{background:#4b5563;border-color:#374151}
 .btn-not-proceeded{background:#8a8a8a;color:#fff;border:1px solid #7a7a7a}
 .btn-not-proceeded:hover{background:#6e6e6e;border-color:#5a5a5a}
-.btn-proceed-restore{background:#5a7ba5;color:#fff;border:1px solid #4a6a90}
-.btn-proceed-restore:hover{background:#4a6a90;border-color:#3b5779}
-.btn-payment{background:#fff;color:#3a6fc8;border:1px solid #9bb6dc}
-.btn-payment:hover{background:#eef4fc;border-color:#3a6fc8}
-.btn-payment-received{background:#3a6fc8;color:#fff;border:1px solid #2d589f}
-.btn-payment-received:hover{background:#2d589f;border-color:#234682}
+.btn-proceed-restore{background:#f59e0b;color:#fff;border:1px solid #d97706}
+.btn-proceed-restore:hover{background:#d97706;border-color:#b45309}
+.btn-payment{background:#5b9bd5;color:#fff;border:1px solid #4a86bf}
+.btn-payment:hover{background:#4a86bf;border-color:#3a6fa0}
+.btn-payment-received{background:#2563eb;color:#fff;border:1px solid #1d4ed8}
+.btn-payment-received:hover{background:#1d4ed8;border-color:#1e40af}
 /* 미진행 숨기기 체크박스 */
 .hf-np-hide{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#555;cursor:pointer;user-select:none;padding:4px 8px;border:1px solid #cdd2da;border-radius:4px;background:#fff;white-space:nowrap}
 .hf-np-hide input{cursor:pointer;width:14px;height:14px;accent-color:#555}
@@ -3515,9 +3520,11 @@ function renderHistory() {
     const npBtnCls  = notProceeded ? 'btn-proceed-restore' : 'btn-not-proceeded';
     const npBtnTxt  = notProceeded ? '진행' : '미진행';
     const npBtnTitle = notProceeded ? '진행 중으로 복원' : '미진행으로 처리';
-    const payBtnHtml = issued
-      ? `<button class="btn btn-sm ${paid?'btn-payment-received':'btn-payment'}" onclick="togglePaymentReceived(event,'${h.id}')" title="${paid?'입금 완료 상태 해제':'입금 완료로 처리'}">${paid?'입금 완료':'입금완료'}</button>`
-      : '';
+    // 입금완료 버튼: 세금계산서 발행된 경우만 보이지만, 공간은 유지 (visibility)
+    const payBtnClass = paid ? 'btn-payment-received' : 'btn-payment';
+    const payBtnVis   = issued ? '' : 'is-hidden';
+    const payBtnLabel = paid ? '입금 완료 ✓' : '입금완료';
+    const payBtnTitle = paid ? '입금 완료 상태 해제' : '입금 완료로 처리';
     return `
     <div class="history-item ${rowCls}" onclick="loadQuote('${h.id}')">
       <div class="history-meta">
@@ -3533,10 +3540,12 @@ function renderHistory() {
         </label>
         <input type="date" value="${esc(issuedDate)}" ${issued?'':'disabled'} onchange="onTaxInvoiceDateChange(event,'${h.id}')">
       </div>
-      <button class="btn btn-secondary btn-sm" onclick="copyQuote(event,'${h.id}')" title="이 견적을 복사">복사</button>
-      <button class="btn btn-sm ${npBtnCls}" onclick="toggleNotProceeded(event,'${h.id}')" title="${npBtnTitle}">${npBtnTxt}</button>
-      ${payBtnHtml}
-      <button class="btn btn-danger btn-sm" onclick="deleteQuote(event,'${h.id}')">삭제</button>
+      <div class="history-actions" onclick="event.stopPropagation()">
+        <button class="btn btn-copy btn-sm" onclick="copyQuote(event,'${h.id}')" title="이 견적을 복사">복사</button>
+        <button class="btn btn-sm ${npBtnCls}" onclick="toggleNotProceeded(event,'${h.id}')" title="${npBtnTitle}">${npBtnTxt}</button>
+        <button class="btn btn-sm ${payBtnClass} ${payBtnVis}" onclick="togglePaymentReceived(event,'${h.id}')" title="${payBtnTitle}">${payBtnLabel}</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteQuote(event,'${h.id}')">삭제</button>
+      </div>
     </div>`;
   }).join('');
 }
