@@ -226,15 +226,23 @@ tbody tr:hover td{background:#fafbfd}
 .history-item.tax-issued:hover{background:#e2f3e2;border-color:#2a7a3a}
 .history-item.tax-unissued{background:#fff5f0;border-color:#f0d2c0}
 .history-item.tax-unissued:hover{background:#ffe8d8;border-color:#d08a4a}
+/* 입금 완료 (세금계산서보다 우선, 미진행보다 후순위) */
+.history-item.payment-received{background:#e8f0fe;border-color:#b6ccea}
+.history-item.payment-received:hover{background:#d6e4f5;border-color:#4a6fa5}
 /* 미진행 견적 */
 .history-item.not-proceeded{background:#eeeeee;border-color:#cfcfcf}
 .history-item.not-proceeded:hover{background:#e3e3e3;border-color:#9a9a9a}
 .history-item.not-proceeded .history-tax{display:none}
 .np-badge{display:inline-block;background:#8a8a8a;color:#fff;font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;margin-right:6px;letter-spacing:.3px;vertical-align:middle}
+.pay-badge{display:inline-block;background:#3a6fc8;color:#fff;font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;margin-right:6px;letter-spacing:.3px;vertical-align:middle}
 .btn-not-proceeded{background:#8a8a8a;color:#fff;border:1px solid #7a7a7a}
 .btn-not-proceeded:hover{background:#6e6e6e;border-color:#5a5a5a}
 .btn-proceed-restore{background:#5a7ba5;color:#fff;border:1px solid #4a6a90}
 .btn-proceed-restore:hover{background:#4a6a90;border-color:#3b5779}
+.btn-payment{background:#fff;color:#3a6fc8;border:1px solid #9bb6dc}
+.btn-payment:hover{background:#eef4fc;border-color:#3a6fc8}
+.btn-payment-received{background:#3a6fc8;color:#fff;border:1px solid #2d589f}
+.btn-payment-received:hover{background:#2d589f;border-color:#234682}
 /* 미진행 숨기기 체크박스 */
 .hf-np-hide{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#555;cursor:pointer;user-select:none;padding:4px 8px;border:1px solid #cdd2da;border-radius:4px;background:#fff;white-space:nowrap}
 .hf-np-hide input{cursor:pointer;width:14px;height:14px;accent-color:#555}
@@ -604,6 +612,11 @@ tbody.sortable-ghost-container tr.sortable-ghost td{border-top:2px solid #1a3a5c
           <option value="all">세금계산서: 전체</option>
           <option value="issued">발행 완료</option>
           <option value="unissued">미발행</option>
+        </select>
+        <select id="hf-payment-select" onchange="setHistoryFilter('payment', this.value)" title="입금 상태">
+          <option value="all">입금 상태: 전체</option>
+          <option value="received">입금 완료</option>
+          <option value="unpaid">미입금 (세금계산서 발행)</option>
         </select>
         <select id="hf-proceed-select" onchange="setHistoryFilter('proceed', this.value)" title="진행 상태">
           <option value="all">진행 상태: 전체</option>
@@ -2288,6 +2301,7 @@ async function saveQuote() {
     imageSheet: { layout: imageSheet.layout, captionPosition: imageSheet.captionPosition, sheetName: imageSheet.sheetName||'이미지 시트', pageCount: imageSheet.pageCount||1, images: savedImages, cellSplits: imageSheet.cellSplits || {} },
     supply: sup, tax, total: sup+tax,
     notProceeded: prevEntry ? !!prevEntry.notProceeded : false,
+    paymentReceived: prevEntry ? !!prevEntry.paymentReceived : false,
     createdBy: prevEntry ? (prevEntry.createdBy || '') : email,
     updatedBy: email,
     savedAt: new Date().toISOString()
@@ -3234,7 +3248,7 @@ function importPriceAppend(e) {
 const LS_HISTORY_FILTERS = 'belcom_history_filters_v1';
 const LS_TAX_FILTER_LEGACY = 'belcom_tax_filter_v1';
 // 저장되는 필터: 수신처 / 세금계산서 / 정렬 / 미진행 숨기기 / 진행 상태 (조회 입력값은 저장 안 함)
-const DEFAULT_HISTORY_FILTERS = { client: '', tax: 'all', sort: 'date-desc', hideNotProceeded: false, proceed: 'all' };
+const DEFAULT_HISTORY_FILTERS = { client: '', tax: 'all', sort: 'date-desc', hideNotProceeded: false, proceed: 'all', payment: 'all' };
 let historyFilters = { ...DEFAULT_HISTORY_FILTERS };
 // 조회 입력(세션 전용): 수신처/프로젝트명 부분 일치 + 날짜 범위
 let historySearchClient    = '';
@@ -3252,6 +3266,7 @@ function loadHistoryFilters() {
       if (typeof obj.sort === 'string') historyFilters.sort = obj.sort;
       if (typeof obj.hideNotProceeded === 'boolean') historyFilters.hideNotProceeded = obj.hideNotProceeded;
       if (obj.proceed === 'all' || obj.proceed === 'proceed' || obj.proceed === 'notProceeded') historyFilters.proceed = obj.proceed;
+      if (obj.payment === 'all' || obj.payment === 'received' || obj.payment === 'unpaid') historyFilters.payment = obj.payment;
     } else {
       // 구 taxFilter 설정 마이그레이션
       const legacy = localStorage.getItem(LS_TAX_FILTER_LEGACY);
@@ -3297,6 +3312,7 @@ function resetHistoryFilters() {
   const pEl = document.getElementById('hf-search-project'); if (pEl) pEl.value = '';
   const npEl = document.getElementById('hf-hide-np'); if (npEl) npEl.checked = false;
   const prEl = document.getElementById('hf-proceed-select'); if (prEl) prEl.value = 'all';
+  const pyEl = document.getElementById('hf-payment-select'); if (pyEl) pyEl.value = 'all';
   if (hfFlatpickr) hfFlatpickr.clear(false);
   saveHistoryFilters();
   renderHistory();
@@ -3415,10 +3431,12 @@ function renderHistory() {
   const taxSel  = document.getElementById('hf-tax-select');
   const sortSel = document.getElementById('hf-sort-select');
   const prSel   = document.getElementById('hf-proceed-select');
+  const pySel   = document.getElementById('hf-payment-select');
   const npCb    = document.getElementById('hf-hide-np');
   if (taxSel)  taxSel.value  = historyFilters.tax;
   if (sortSel) sortSel.value = historyFilters.sort;
   if (prSel)   prSel.value   = historyFilters.proceed;
+  if (pySel)   pySel.value   = historyFilters.payment;
   if (npCb)    npCb.checked  = !!historyFilters.hideNotProceeded;
   renderClientFilterOptions();
 
@@ -3451,6 +3469,10 @@ function renderHistory() {
   if (historyFilters.tax === 'issued')   list = list.filter(h =>  !!h.taxInvoiceIssued);
   else if (historyFilters.tax === 'unissued') list = list.filter(h => !h.taxInvoiceIssued);
 
+  // 입금 상태 필터: 전체 / 입금완료 / 미입금(세금계산서 발행 && 입금 안 됨)
+  if (historyFilters.payment === 'received')      list = list.filter(h => !!h.paymentReceived);
+  else if (historyFilters.payment === 'unpaid')   list = list.filter(h => !!h.taxInvoiceIssued && !h.paymentReceived);
+
   // 진행 상태 필터 (드롭다운): 전체 / 진행 / 미진행
   if (historyFilters.proceed === 'proceed')        list = list.filter(h => !h.notProceeded);
   else if (historyFilters.proceed === 'notProceeded') list = list.filter(h => !!h.notProceeded);
@@ -3481,17 +3503,25 @@ function renderHistory() {
     const issued = !!h.taxInvoiceIssued;
     const issuedDate = h.taxInvoiceIssuedDate || '';
     const notProceeded = !!h.notProceeded;
-    const rowCls = notProceeded ? 'not-proceeded' : (issued ? 'tax-issued' : 'tax-unissued');
+    const paid = !!h.paymentReceived;
+    // 우선순위: 미진행 > 입금완료 > 세금계산서 발행 > 기본
+    const rowCls = notProceeded
+      ? 'not-proceeded'
+      : (paid ? 'payment-received' : (issued ? 'tax-issued' : 'tax-unissued'));
     const statusCls = issued ? 'tax-status-issued' : 'tax-status-unissued';
     const statusTxt = issued ? '발행' : '미발행';
     const npBadge   = notProceeded ? '<span class="np-badge">미진행</span>' : '';
+    const payBadge  = (!notProceeded && paid) ? '<span class="pay-badge">입금 완료</span>' : '';
     const npBtnCls  = notProceeded ? 'btn-proceed-restore' : 'btn-not-proceeded';
     const npBtnTxt  = notProceeded ? '진행' : '미진행';
     const npBtnTitle = notProceeded ? '진행 중으로 복원' : '미진행으로 처리';
+    const payBtnHtml = issued
+      ? `<button class="btn btn-sm ${paid?'btn-payment-received':'btn-payment'}" onclick="togglePaymentReceived(event,'${h.id}')" title="${paid?'입금 완료 상태 해제':'입금 완료로 처리'}">${paid?'입금 완료':'입금완료'}</button>`
+      : '';
     return `
     <div class="history-item ${rowCls}" onclick="loadQuote('${h.id}')">
       <div class="history-meta">
-        <div class="h-client">${npBadge}${esc(h.client)}</div>
+        <div class="h-client">${npBadge}${payBadge}${esc(h.client)}</div>
         <div class="h-project">${esc(h.project||'(프로젝트명 없음)')}</div>
         <div class="h-date">${h.date} · 저장: ${(h.savedAt||'').substring(0,10)}</div>
       </div>
@@ -3505,6 +3535,7 @@ function renderHistory() {
       </div>
       <button class="btn btn-secondary btn-sm" onclick="copyQuote(event,'${h.id}')" title="이 견적을 복사">복사</button>
       <button class="btn btn-sm ${npBtnCls}" onclick="toggleNotProceeded(event,'${h.id}')" title="${npBtnTitle}">${npBtnTxt}</button>
+      ${payBtnHtml}
       <button class="btn btn-danger btn-sm" onclick="deleteQuote(event,'${h.id}')">삭제</button>
     </div>`;
   }).join('');
@@ -3518,11 +3549,16 @@ async function onTaxInvoiceToggle(e, id) {
     const ok = confirm('세금계산서 발행 체크를 해제하시겠습니까?\n발행일자도 함께 삭제됩니다.');
     if (!ok) { cb.checked = true; return; }
   }
+  // 세금계산서 체크 해제 시 입금 완료 상태도 함께 해제 (전제: 세금계산서 발행 → 입금)
   const payload = checked
     ? { taxInvoiceIssued: true,  taxInvoiceIssuedDate: today() }
-    : { taxInvoiceIssued: false, taxInvoiceIssuedDate: null };
+    : { taxInvoiceIssued: false, taxInvoiceIssuedDate: null, paymentReceived: false };
   const entry = quoteHistory.find(h => h.id === id);
-  if (entry) { entry.taxInvoiceIssued = payload.taxInvoiceIssued; entry.taxInvoiceIssuedDate = payload.taxInvoiceIssuedDate; }
+  if (entry) {
+    entry.taxInvoiceIssued = payload.taxInvoiceIssued;
+    entry.taxInvoiceIssuedDate = payload.taxInvoiceIssuedDate;
+    if (!checked) entry.paymentReceived = false;
+  }
   setSyncStatus('syncing');
   try {
     await fsCollection('quotes').doc(id).update(payload);
@@ -3534,7 +3570,12 @@ async function onTaxInvoiceToggle(e, id) {
   // 로컬 캐시 반영
   const hist = loadHistoryLS();
   const idx = hist.findIndex(h => h.id === id);
-  if (idx >= 0) { hist[idx].taxInvoiceIssued = payload.taxInvoiceIssued; hist[idx].taxInvoiceIssuedDate = payload.taxInvoiceIssuedDate; saveHistoryLS(hist); }
+  if (idx >= 0) {
+    hist[idx].taxInvoiceIssued = payload.taxInvoiceIssued;
+    hist[idx].taxInvoiceIssuedDate = payload.taxInvoiceIssuedDate;
+    if (!checked) hist[idx].paymentReceived = false;
+    saveHistoryLS(hist);
+  }
   renderHistory();
 }
 
@@ -3584,6 +3625,35 @@ async function toggleNotProceeded(e, id) {
   renderHistory();
 }
 
+// ===== 입금 완료 처리 =====
+async function togglePaymentReceived(e, id) {
+  if (e) e.stopPropagation();
+  const entry = quoteHistory.find(h => h.id === id);
+  if (!entry) return;
+  // 안전장치: 세금계산서 발행 안 된 상태에서는 토글 불가 (UI상 버튼이 숨겨지지만 방어 코드)
+  if (!entry.taxInvoiceIssued) return;
+  const curr = !!entry.paymentReceived;
+  const next = !curr;
+  const msg = next
+    ? '이 견적을 입금 완료로 처리하시겠습니까?'
+    : '입금 완료 상태를 해제하시겠습니까?';
+  if (!confirm(msg)) return;
+  entry.paymentReceived = next;
+  setSyncStatus('syncing');
+  try {
+    await fsCollection('quotes').doc(id).update({ paymentReceived: next });
+    setSyncStatus('ok');
+  } catch(err) {
+    console.error('Payment-received update error:', err);
+    setSyncStatus('error', '저장 실패');
+  }
+  // 로컬 캐시 반영
+  const hist = loadHistoryLS();
+  const idx = hist.findIndex(h => h.id === id);
+  if (idx >= 0) { hist[idx].paymentReceived = next; saveHistoryLS(hist); }
+  renderHistory();
+}
+
 // ===== 견적 복사 =====
 let pendingCopyId = null;
 
@@ -3622,6 +3692,7 @@ function _buildCopiedQuote(src) {
   copy.taxInvoiceIssued = false;
   copy.taxInvoiceIssuedDate = null;
   copy.notProceeded = false;
+  copy.paymentReceived = false;
   const email = currentUserEmail();
   copy.createdBy = email;
   copy.updatedBy = email;
