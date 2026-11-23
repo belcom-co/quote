@@ -217,13 +217,7 @@ tbody tr:hover td{background:#fafbfd}
 /* 세금계산서 */
 .history-tax{display:flex;flex-direction:column;gap:4px;align-items:flex-start;width:160px;flex-shrink:0;padding:0 8px;border-left:1px solid #e8ecf2;border-right:1px solid #e8ecf2;box-sizing:border-box}
 .history-actions{display:flex;align-items:center;gap:6px;justify-content:flex-end;width:290px;flex-shrink:0;box-sizing:border-box}
-.history-actions .btn{flex-shrink:0;text-align:center;box-sizing:border-box}
-.history-actions .btn-copy{width:50px}
-.history-actions .btn-not-proceeded,
-.history-actions .btn-proceed-restore{width:56px}
-.history-actions .btn-payment,
-.history-actions .btn-payment-received{width:92px}
-.history-actions .btn-danger{width:50px}
+.history-actions .btn{flex-shrink:0;width:68px;text-align:center;box-sizing:border-box;padding-left:4px;padding-right:4px}
 .history-actions .is-hidden{visibility:hidden}
 .history-tax label{display:flex;align-items:center;gap:5px;font-size:11px;color:#555;cursor:pointer;user-select:none;white-space:nowrap}
 .history-tax input[type=checkbox]{cursor:pointer;width:14px;height:14px;accent-color:#2a7a3a}
@@ -3529,7 +3523,7 @@ function renderHistory() {
     // 입금완료 버튼: 세금계산서 발행된 경우만 보이지만, 공간은 유지 (visibility)
     const payBtnClass = paid ? 'btn-payment-received' : 'btn-payment';
     const payBtnVis   = issued ? '' : 'is-hidden';
-    const payBtnLabel = paid ? '입금 완료 ✓' : '입금완료';
+    const payBtnLabel = '입금완료';
     const payBtnTitle = paid ? '입금 완료 상태 해제' : '입금 완료로 처리';
     return `
     <div class="history-item ${rowCls}" onclick="loadQuote('${h.id}')">
